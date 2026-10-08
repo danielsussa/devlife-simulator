@@ -1,9 +1,38 @@
 // Simulation engine: plain TypeScript, no rendering at all.
 // Time unit: hours. t=0 is Monday 00:00.
 
+const DEV_NAMES = ['Ana', 'Bruno', 'Carla', 'Diego', 'Elisa', 'Fábio', 'Gabi', 'Hugo', 'Iara'];
+
+export type Level = 'junior' | 'mid' | 'senior';
+
+/** Per-developer traits. */
+export interface DevProfile {
+  name: string;
+  level: Level;
+  daysPerFeature: number; // average working days this dev takes for a feature
+  commentPct: number; // % of reviews of this dev's PRs that flag an issue (quality)
+  bugPct: number; // % of this dev's deliveries that cause a production bug
+  reviewPickup: number; // multiplier on how long this dev takes to pick up a review (1 = normal)
+}
+
+export const LEVEL_PRESETS: Record<Level, Omit<DevProfile, 'name' | 'level'>> = {
+  junior: { daysPerFeature: 4.5, commentPct: 35, bugPct: 25, reviewPickup: 1.3 },
+  mid: { daysPerFeature: 3, commentPct: 20, bugPct: 15, reviewPickup: 1 },
+  senior: { daysPerFeature: 2, commentPct: 10, bugPct: 8, reviewPickup: 0.7 },
+};
+
+export const MAX_DEVS = 8;
+const DEFAULT_LEVELS: Level[] = ['senior', 'mid', 'mid', 'junior', 'mid', 'senior', 'junior', 'mid'];
+
+export function defaultProfile(i: number): DevProfile {
+  const level = DEFAULT_LEVELS[i % DEFAULT_LEVELS.length];
+  return { name: DEV_NAMES[i % DEV_NAMES.length], level, ...LEVEL_PRESETS[level] };
+}
+
 export interface Config {
   seed: number;
   devs: number;
+  devProfiles: DevProfile[]; // one per dev (index = dev id)
   techLeads: number; // don't pick features: they review, refine and attend the daily
   devApprovals: number; // dev approvals required per PR
   techLeadApprovals: number; // tech lead approvals required per PR
@@ -20,7 +49,6 @@ export interface Config {
   tlReviewWaitDaysMin: number; // working days until the tech lead picks up the PR
   tlReviewWaitDaysMax: number;
   reviewEffortHours: number; // time the reviewer spends reviewing
-  changesRequestedPct: number; // % of reviews where the reviewer flags an issue
   refactorPctMin: number; // refactoring costs X% of the feature's original effort
   refactorPctMax: number;
   envs: string[];
@@ -38,7 +66,6 @@ export interface Config {
   deployHoursMin: number; // how long the dev stays up at night
   deployHoursMax: number;
   deployOnFriday: boolean;
-  bugPct: number; // % of delivered features that cause a production bug
   bugMaxDaysAfter: number; // bug shows up between the deploy and N days later
   bugSwarmDevs: number; // how many devs drop everything to help with the bug
   bugFixHoursMin: number; // total fix effort (dev-hours, split across the swarm)
@@ -49,6 +76,7 @@ export interface Config {
 export const defaultConfig: Config = {
   seed: 42,
   devs: 5,
+  devProfiles: Array.from({ length: MAX_DEVS }, (_, i) => defaultProfile(i)),
   techLeads: 1,
   devApprovals: 1,
   techLeadApprovals: 1,
@@ -65,7 +93,6 @@ export const defaultConfig: Config = {
   tlReviewWaitDaysMin: 0.1,
   tlReviewWaitDaysMax: 1,
   reviewEffortHours: 1,
-  changesRequestedPct: 20,
   refactorPctMin: 15,
   refactorPctMax: 40,
   envs: ['P1', 'P2', 'P3'],
@@ -83,7 +110,6 @@ export const defaultConfig: Config = {
   deployHoursMin: 1,
   deployHoursMax: 3,
   deployOnFriday: false,
-  bugPct: 15,
   bugMaxDaysAfter: 5,
   bugSwarmDevs: 2,
   bugFixHoursMin: 3,
@@ -179,6 +205,7 @@ export interface Ticket {
   conflicts: number; // merge conflicts suffered
   awaitingMerge: boolean; // approved, but main is full
   approvedAt: number;
+  size: number; // feature size in working days for a mid-level dev (set at refinement)
   reworkHours: number; // hours spent refactoring/fixing
   doneAt: number | null;
 }
@@ -244,7 +271,6 @@ export interface SimEvent {
   ticketId?: number;
 }
 
-const DEV_NAMES = ['Ana', 'Bruno', 'Carla', 'Diego', 'Elisa', 'Fábio', 'Gabi', 'Hugo', 'Iara'];
 const TL_NAMES = ['Rita', 'Otávio', 'Lúcia'];
 export const MAX_PEOPLE = 9; // desks in the office
 const FEATURES = [
@@ -323,7 +349,7 @@ export class Sim {
     this.devs = Array.from({ length: devs + tls }, (_, i) => ({
       id: i,
       role: i < devs ? ('dev' as const) : ('techlead' as const),
-      name: i < devs ? DEV_NAMES[i % DEV_NAMES.length] : `${TL_NAMES[(i - devs) % TL_NAMES.length]} (TL)`,
+      name: i < devs ? this.profile(i).name : `${TL_NAMES[(i - devs) % TL_NAMES.length]} (TL)`,
       ticketId: null,
       reviewTicketId: null,
       reviewLeft: 0,
@@ -346,6 +372,20 @@ export class Sim {
 
   isProdEnv(i: number) {
     return i >= this.firstProdEnv;
+  }
+
+  /** Profile of dev `id` (falls back to the default for that slot). */
+  profile(id: number): DevProfile {
+    return this.cfg.devProfiles[id] ?? defaultProfile(id);
+  }
+
+  private authorProfile(tk: Ticket): DevProfile {
+    return this.profile(tk.author ?? 0);
+  }
+
+  /** Apply live profile edits (names) without restarting. */
+  syncProfiles() {
+    for (const d of this.devs) if (d.role === 'dev') d.name = this.profile(d.id).name;
   }
 
   get working() {
@@ -445,6 +485,7 @@ export class Sim {
       conflicts: 0,
       awaitingMerge: false,
       approvedAt: 0,
+      size: 0,
       reworkHours: 0,
       doneAt: null,
       kind: 'feature',
@@ -472,8 +513,8 @@ export class Sim {
       const tk = this.ticket(id)!;
       this.move(tk, () => {
         tk.stage = 'ready';
-        const days = this.uniform(this.cfg.devDaysMin, this.cfg.devDaysMax);
-        tk.workOriginal = tk.workTotal = days * WORK_HOURS_PER_DAY;
+        tk.size = this.uniform(this.cfg.devDaysMin, this.cfg.devDaysMax);
+        tk.workOriginal = tk.workTotal = tk.size * WORK_HOURS_PER_DAY;
       });
     }
     for (const id of m.devIds) this.devs[id].inMeeting = false;
@@ -526,7 +567,12 @@ export class Sim {
       this.move(tk, () => {
         tk.stage = 'doing';
         tk.devId = dev.id;
-        if (tk.author == null) tk.author = dev.id;
+        if (tk.author == null) {
+          tk.author = dev.id;
+          // the same feature takes longer for a slower dev (feature size is calibrated for a mid-level dev)
+          const mid = (this.cfg.devDaysMin + this.cfg.devDaysMax) / 2 || 1;
+          tk.workOriginal = tk.workTotal = tk.size * (this.profile(dev.id).daysPerFeature / mid) * WORK_HOURS_PER_DAY;
+        }
       });
       dev.ticketId = tk.id;
       this.emit('info', `${dev.name} started ${tk.rework ? 'rework on ' : ''}#${tk.id}`, { devId: dev.id, ticketId: tk.id });
@@ -569,7 +615,7 @@ export class Sim {
           : this.work +
           (d.role === 'techlead'
             ? this.uniform(this.cfg.tlReviewWaitDaysMin, this.cfg.tlReviewWaitDaysMax)
-            : this.uniform(this.cfg.reviewWaitDaysMin, this.cfg.reviewWaitDaysMax)) *
+            : this.uniform(this.cfg.reviewWaitDaysMin, this.cfg.reviewWaitDaysMax) * this.profile(d.id).reviewPickup) *
             WORK_HOURS_PER_DAY,
         started: false,
         done: false,
@@ -594,7 +640,7 @@ export class Sim {
       dev.reviewTicketId = null;
       const rv = tk.reviews.find((r) => r.devId === dev.id && r.started && !r.done);
       if (!rv) continue;
-      if (tk.kind === 'feature' && this.rand() * 100 < this.cfg.changesRequestedPct) {
+      if (tk.kind === 'feature' && this.rand() * 100 < this.authorProfile(tk).commentPct) {
         tk.comments++;
         const hours = this.reworkHoursFor(tk, this.cfg.refactorPctMin / 100, this.cfg.refactorPctMax / 100);
         this.emit('review-changes', `${dev.name} flagged an issue on PR #${tk.id}: ~${hours.toFixed(0)}h refactor`, {
@@ -784,7 +830,7 @@ export class Sim {
               tk.deploying = false;
               tk.envIndex++;
               // reached the first production environment: real users, a bug may show up
-              if (i === this.firstProdEnv && tk.bugAt == null && this.rand() * 100 < this.cfg.bugPct)
+              if (i === this.firstProdEnv && tk.bugAt == null && this.rand() * 100 < this.authorProfile(tk).bugPct)
                 tk.bugAt = this.t + this.rand() * this.cfg.bugMaxDaysAfter * 24;
               if (tk.envIndex >= this.envs.length) {
                 tk.stage = 'done';
@@ -924,6 +970,7 @@ export class Sim {
         conflicts: 0,
         awaitingMerge: false,
         approvedAt: 0,
+        size: 0,
         reworkHours: 0,
         doneAt: null,
         swarm: [],

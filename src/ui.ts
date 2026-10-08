@@ -1,4 +1,4 @@
-import { Config, formatClock, Sim, Tag, Ticket } from './sim';
+import { Config, defaultProfile, DevProfile, formatClock, Level, LEVEL_PRESETS, MAX_DEVS, Sim, Tag, Ticket } from './sim';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const hex = (c: number) => '#' + c.toString(16).padStart(6, '0');
@@ -245,8 +245,8 @@ const GROUPS: { title: string; icon: string; fields: Field[] }[] = [
     title: 'Development (working days)',
     icon: 'code',
     fields: [
-      { key: 'devDaysMin', label: 'Minimum', min: 0.25, max: 30, step: 0.25 },
-      { key: 'devDaysMax', label: 'Maximum', min: 0.25, max: 30, step: 0.25 },
+      { key: 'devDaysMin', label: 'Feature size min (days, for a mid-level dev)', min: 0.25, max: 30, step: 0.25 },
+      { key: 'devDaysMax', label: 'Feature size max (days, for a mid-level dev)', min: 0.25, max: 30, step: 0.25 },
     ],
   },
   {
@@ -260,7 +260,6 @@ const GROUPS: { title: string; icon: string; fields: Field[] }[] = [
       { key: 'tlReviewWaitDaysMin', label: 'TL pickup delay, min (days)', min: 0, max: 10, step: 0.1 },
       { key: 'tlReviewWaitDaysMax', label: 'TL pickup delay, max (days)', min: 0, max: 10, step: 0.1 },
       { key: 'reviewEffortHours', label: 'Review effort (h)', min: 0.25, max: 8, step: 0.25 },
-      { key: 'changesRequestedPct', label: '% of reviews with comments', min: 0, max: 100, step: 1 },
       { key: 'refactorPctMin', label: 'Refactor min (% of effort)', min: 0, max: 200, step: 5 },
       { key: 'refactorPctMax', label: 'Refactor max (% of effort)', min: 0, max: 200, step: 5 },
     ],
@@ -296,7 +295,6 @@ const GROUPS: { title: string; icon: string; fields: Field[] }[] = [
     title: 'Production bugs',
     icon: 'bug',
     fields: [
-      { key: 'bugPct', label: '% of deliveries with a bug', min: 0, max: 100, step: 1 },
       { key: 'bugMaxDaysAfter', label: 'Bug appears up to N days after deploy', min: 0, max: 30, step: 0.5 },
       { key: 'bugSwarmDevs', label: 'Devs who drop everything to help', min: 1, max: 8, step: 1 },
       { key: 'bugFixHoursMin', label: 'Fix effort, min (dev-hours)', min: 0.5, max: 80, step: 0.5 },
@@ -340,4 +338,82 @@ export function buildConfigForm(cfg: Config, onChange: (restart: boolean) => voi
     }
     onChange(!!field.restart);
   });
+}
+
+// ---- per-developer profiles ---------------------------------------------------
+
+const LEVELS: Level[] = ['junior', 'mid', 'senior'];
+const PROFILE_FIELDS: { key: keyof DevProfile; label: string; title: string; min: number; max: number; step: number }[] = [
+  { key: 'daysPerFeature', label: 'days/feature', title: 'Average working days this dev takes to build a feature', min: 0.25, max: 30, step: 0.25 },
+  { key: 'commentPct', label: 'comments %', title: '% of reviews of this dev’s PRs that flag an issue (refactor needed)', min: 0, max: 100, step: 1 },
+  { key: 'bugPct', label: 'bugs %', title: '% of this dev’s deliveries that cause a production bug', min: 0, max: 100, step: 1 },
+  { key: 'reviewPickup', label: 'pickup ×', title: 'Multiplier on how long this dev takes to pick up a review (1 = normal, 0.5 = twice as fast)', min: 0.1, max: 5, step: 0.1 },
+];
+
+/** Makes sure there is a full profile for every dev slot. */
+export function normalizeProfiles(cfg: Config) {
+  cfg.devProfiles = Array.from({ length: MAX_DEVS }, (_, i) => ({ ...defaultProfile(i), ...(cfg.devProfiles[i] ?? {}) }));
+}
+
+export function renderTeamEditor(cfg: Config) {
+  const n = Math.min(cfg.devs, MAX_DEVS);
+  $('teamEditor').innerHTML = `<fieldset><legend>${ic('user-gear')} Developers</legend>
+    ${cfg.devProfiles
+      .slice(0, n)
+      .map(
+        (p, i) => `<div class="devrow" data-i="${i}">
+          <div class="r1">
+            <input type="text" name="name" value="${esc(p.name)}" maxlength="14" aria-label="Name">
+            <select name="level" aria-label="Level">${LEVELS.map((l) => `<option value="${l}" ${l === p.level ? 'selected' : ''}>${l}</option>`).join('')}</select>
+          </div>
+          <div class="r2">${PROFILE_FIELDS.map(
+            (f) => `<label title="${esc(f.title)}"><span>${f.label}</span><input type="number" name="${f.key}" value="${p[f.key]}" min="${f.min}" max="${f.max}" step="${f.step}"></label>`,
+          ).join('')}</div>
+        </div>`,
+      )
+      .join('')}
+    <p class="hint">Picking a level fills in typical values; tweak any field. The feature size range below is calibrated for a mid-level dev.</p>
+  </fieldset>`;
+}
+
+export function setupTeamEditor(cfg: Config, onChange: () => void) {
+  const el = $('teamEditor');
+  el.addEventListener('change', (ev) => {
+    const input = ev.target as HTMLInputElement | HTMLSelectElement;
+    const row = input.closest<HTMLElement>('.devrow');
+    if (!row) return;
+    const p = cfg.devProfiles[Number(row.dataset.i)];
+    if (input.name === 'name') p.name = input.value.trim() || p.name;
+    else if (input.name === 'level') {
+      p.level = input.value as Level;
+      Object.assign(p, LEVEL_PRESETS[p.level]);
+      renderTeamEditor(cfg);
+    } else {
+      const f = PROFILE_FIELDS.find((x) => x.key === input.name);
+      if (!f) return;
+      const n = Math.min(f.max, Math.max(f.min, Number(input.value)));
+      if (Number.isNaN(n)) return;
+      (p as unknown as Record<string, number>)[f.key] = n;
+      input.value = String(n);
+    }
+    onChange();
+  });
+  renderTeamEditor(cfg);
+}
+
+/** Per-dev results, so the effect of each profile is visible. */
+export function renderTeam(sim: Sim) {
+  const since = sim.t - 30 * 24;
+  const rows = sim.devs
+    .filter((d) => d.role === 'dev')
+    .map((d) => {
+      const p = sim.profile(d.id);
+      const done = sim.tickets.filter((tk) => tk.kind === 'feature' && tk.author === d.id && tk.doneAt != null && tk.doneAt >= since);
+      const devDays = done.length ? done.reduce((s, tk) => s + (tk.time.doing ?? 0), 0) / done.length / 24 : 0;
+      const comments = done.length ? done.reduce((s, tk) => s + tk.comments, 0) / done.length : 0;
+      const bugs = sim.tickets.filter((tk) => tk.kind === 'bug' && tk.createdAt >= since && sim.ticket(tk.parentId)?.author === d.id).length;
+      return `<tr><td>${esc(d.name)}</td><td><span class="lvl ${p.level}">${p.level}</span></td><td>${done.length}</td><td>${done.length ? devDays.toFixed(1) + 'd' : '–'}</td><td>${done.length ? comments.toFixed(1) : '–'}</td><td>${bugs}</td></tr>`;
+    })
+    .join('');
+  $('team').innerHTML = `<table class="team"><thead><tr><th>Dev</th><th>Level</th><th title="Features delivered (30d)">${ic('truck-fast')}</th><th title="Avg time in development">${ic('code')}</th><th title="Review comments per delivery">${ic('comment-dots')}</th><th title="Production bugs caused (30d)">${ic('bug')}</th></tr></thead><tbody>${rows}</tbody></table>`;
 }
