@@ -100,6 +100,7 @@ export class OfficeScene extends Phaser.Scene {
     );
     this.po = this.makeWalker(PO_SPRITE, this.layout.poSeat);
 
+    this.nightAlpha = 0;
     this.night = this.add.rectangle(0, 0, MAP_W * TILE, MAP_H * TILE, 0x0b1030, 0).setOrigin(0).setDepth(30000);
     // desk lamp for the on-call deployer
     const c = this.layout.deployConsole.seat;
@@ -126,7 +127,7 @@ export class OfficeScene extends Phaser.Scene {
     this.updatePeople(sim, dt, walkSpeed);
     this.updateCards(sim, dt);
     this.drawOverlay(sim);
-    this.updateNight(sim);
+    this.updateNight(sim, dt);
   }
 
   // ---- people ---------------------------------------------------------------
@@ -474,7 +475,9 @@ export class OfficeScene extends Phaser.Scene {
     d.setDepth(19000);
   }
 
-  private updateNight(sim: Sim) {
+  private nightAlpha = 0;
+
+  private updateNight(sim: Sim, dt: number) {
     const h = sim.t % 24;
     const day = Math.floor(sim.t / 24) % 7;
     let a: number;
@@ -483,8 +486,15 @@ export class OfficeScene extends Phaser.Scene {
     else if (h >= DAY_END + 1 && h < DAY_END + 2) a = 0.45 * (h - DAY_END - 1);
     else a = 0.45;
     if (day >= 5) a = Math.max(a, 0.3);
-    this.night.setFillStyle(0x0b1030, a);
-    this.lamp.setVisible(!!sim.deploySession && a > 0.1);
+    // At high speed the day/night cycle turns into flicker: fade the night out as
+    // speed grows (full up to 4h/s, ~25% at 1d/s and above)...
+    const hps = this.hooks.hoursPerSecond();
+    const strength = Phaser.Math.Clamp(1 - (hps - 4) / 26, 0.25, 1);
+    a *= strength;
+    // ...and low-pass the alpha (~0.5s) so transitions never snap
+    this.nightAlpha += (a - this.nightAlpha) * (1 - Math.exp(-dt / 0.5));
+    this.night.setFillStyle(0x0b1030, this.nightAlpha);
+    this.lamp.setVisible(!!sim.deploySession && this.nightAlpha > 0.1);
   }
 
   // ---- static setup ------------------------------------------------------------
