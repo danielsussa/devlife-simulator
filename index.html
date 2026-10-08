@@ -12,16 +12,16 @@
         <div class="brand">DevLife <span>Simulator</span></div>
         <div id="clock" class="clock"></div>
         <div id="speeds" class="speeds"></div>
-        <label class="toggle"><input type="checkbox" id="fastNights" checked /> fast-forward nights</label>
-        <button id="restart" class="btn">↻ Restart</button>
-        <button id="shareBtn" class="btn" title="Copy a link with the current settings">🔗 Share</button>
-        <button id="configBtn" class="btn">⚙ Settings</button>
+        <label class="toggle"><input type="checkbox" id="fastNights" checked /> <i class="fa-solid fa-forward"></i> fast-forward nights</label>
+        <button id="restart" class="btn"><i class="fa-solid fa-rotate-right"></i> Restart</button>
+        <button id="shareBtn" class="btn" title="Copy a link with the current settings"><i class="fa-solid fa-link"></i> Share</button>
+        <button id="configBtn" class="btn"><i class="fa-solid fa-sliders"></i> Settings</button>
       </header>
       <main>
         <section id="stage"></section>
         <aside id="side">
           <div id="metrics"></div>
-          <h3>Events</h3>
+          <h3><i class="fa-solid fa-list-ul"></i> Events</h3>
           <ol id="log"></ol>
         </aside>
       </main>
@@ -29,11 +29,11 @@
       <div id="config" class="drawer" hidden>
         <div class="drawer-head">
           <h2>Settings</h2>
-          <button id="configClose" class="btn">✕</button>
+          <button id="configClose" class="btn" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
         </div>
         <form id="configForm"></form>
         <p class="hint">Changing the team, environments or seed restarts the simulation. Everything else applies immediately. The URL always carries the current setup (🔗 Share copies the link).</p>
-        <button id="resetCfg" class="btn">Reset to defaults</button>
+        <button id="resetCfg" class="btn"><i class="fa-solid fa-arrow-rotate-left"></i> Reset to defaults</button>
         <p class="credit">Tiles: Kenney.nl (CC0)</p>
       </div>
     </div>

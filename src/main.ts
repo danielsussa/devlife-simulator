@@ -1,9 +1,11 @@
 import Phaser from 'phaser';
+import '@fortawesome/fontawesome-free/css/fontawesome.min.css';
+import '@fortawesome/fontawesome-free/css/solid.min.css';
 import './style.css';
 import { OfficeScene } from './scene';
 import { defaultConfig, Sim } from './sim';
 import { loadConfigFromUrl, shareUrl, syncUrl } from './share';
-import { buildConfigForm, renderClock, renderKanban, renderLog, renderMetrics } from './ui';
+import { buildConfigForm, ic, renderClock, renderKanban, renderLog, renderMetrics } from './ui';
 
 const cfg = structuredClone(defaultConfig);
 loadConfigFromUrl(cfg); // setup shared via ?cfg=
@@ -11,7 +13,7 @@ syncUrl(cfg);
 let sim = new Sim(cfg);
 
 const SPEEDS = [
-  { label: '⏸', h: 0 },
+  { label: ic('pause'), h: 0 },
   { label: '15min/s', h: 0.25 },
   { label: '1h/s', h: 1 },
   { label: '4h/s', h: 4 },
@@ -91,11 +93,11 @@ shareBtn.addEventListener('click', async () => {
   const url = shareUrl(cfg);
   try {
     await navigator.clipboard.writeText(url);
-    shareBtn.textContent = '✓ Link copied';
+    shareBtn.innerHTML = `${ic('check')} Link copied`;
   } catch {
     prompt('Copy the setup link:', url);
   }
-  setTimeout(() => (shareBtn.textContent = '🔗 Share'), 1800);
+  setTimeout(() => (shareBtn.innerHTML = `${ic('link')} Share`), 1800);
 });
 document.getElementById('resetCfg')!.addEventListener('click', () => {
   location.href = location.pathname; // no ?cfg= means defaults

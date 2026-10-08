@@ -60,7 +60,7 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; min-height: 0
 .legend li i { width: 10px; height: 10px; border-radius: 2px; }
 .legend li b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
 .legend li { white-space: nowrap; }
-.legend li.top b::after { content: ' ◀ bottleneck'; color: var(--warn); font-weight: 500; font-size: 11px; }
+.legend li.top b::after { content: '\f0d9  bottleneck'; font-family: 'Font Awesome 6 Free', system-ui, sans-serif; color: var(--warn); font-weight: 500; font-size: 11px; }
 
 #log { list-style: none; margin: 0; padding: 0; font-size: 12px; overflow-y: auto; flex: 1; min-height: 80px; }
 #log li { padding: 3px 0 3px 8px; border-left: 2px solid var(--line); margin-bottom: 2px; color: var(--text-2); }
@@ -92,6 +92,19 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; min-height: 0
 .kcard .prs { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
 .kcard .prs .pr { font-size: 10px; padding: 0 4px; border-radius: 3px; border-left: 3px solid; background: var(--panel); color: var(--text-2); }
 .kcard .prs .pr:hover { outline: 1px solid var(--accent); }
+.tile .v .ti { font-size: 12px; color: var(--muted); margin-right: 6px; vertical-align: 1px; }
+.tile.alarm .v .ti { color: var(--bad); }
+.col h4 em { font-style: normal; display: flex; gap: 6px; align-items: center; }
+.col h4 em i { color: var(--muted); font-size: 11px; }
+#log li .fa-solid { margin: 0 3px; font-size: 11px; }
+#log li .li { color: var(--muted); margin-left: 0; }
+#log li.good .li, #log li.review-ok .li { color: var(--good); }
+#log li.bad .li, #log li.bad .fa-solid { color: var(--bad); }
+#log li.warn .li, #log li.review-changes .li { color: var(--warn); }
+.kcard .fa-solid { font-size: 10px; }
+.btn .fa-solid { margin-right: 3px; }
+.drawer legend .fa-solid { margin-right: 4px; }
+#side h3 .fa-solid { margin-right: 4px; }
 .more { color: var(--muted); font-size: 11px; text-align: center; padding: 2px; }
 
 .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 340px; background: var(--panel); border-left: 1px solid var(--line); padding: 14px 16px; overflow-y: auto; z-index: 10; box-shadow: -10px 0 30px #0008; }
