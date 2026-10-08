@@ -17,6 +17,7 @@
   --s5: #d55181;
   --s6: #9085e9;
   --s7: #e66767;
+  --s8: #2fa52f;
   color-scheme: dark;
 }
 
@@ -28,7 +29,7 @@ html, body { margin: 0; height: 100%; background: var(--bg); color: var(--text);
 header { display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: var(--panel); border-bottom: 1px solid var(--line); flex-wrap: wrap; }
 .brand { font-weight: 800; letter-spacing: .5px; }
 .brand span { color: var(--accent); }
-.clock { font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, monospace; background: var(--panel-2); padding: 4px 10px; border-radius: 6px; width: calc(46ch + 20px); flex: none; white-space: nowrap; overflow: hidden; }
+.clock { font-variant-numeric: tabular-nums; font-family: ui-monospace, Menlo, monospace; background: var(--panel-2); padding: 4px 10px; border-radius: 6px; width: calc(25ch + 20px); flex: none; white-space: nowrap; overflow: hidden; }
 .clock .off { color: var(--muted); }
 .clock .off.hide { visibility: hidden; }
 .speeds { display: flex; gap: 2px; background: var(--panel-2); padding: 2px; border-radius: 7px; }

@@ -26,6 +26,10 @@ export interface Config {
   envs: string[];
   prodEnvCount: number; // os últimos N ambientes são produção (P1, P2, P3)
   envsPerDay: number; // quantos ambientes podem receber deploy por dia
+  maxMainPRs: number; // máx. de PRs mergeadas na main esperando tag (0 = sem limite)
+  conflictPct: number; // a cada merge, chance de conflitar cada PR aberta
+  conflictHoursMin: number; // esforço pra resolver o conflito
+  conflictHoursMax: number;
   canaryHoursMin: number; // canary por ambiente (máx 24h)
   canaryHoursMax: number;
   canaryFailPct: number;
@@ -67,6 +71,10 @@ export const defaultConfig: Config = {
   envs: ['P1', 'P2', 'P3'],
   prodEnvCount: 3,
   envsPerDay: 1,
+  maxMainPRs: 5,
+  conflictPct: 10,
+  conflictHoursMin: 1,
+  conflictHoursMax: 4,
   canaryHoursMin: 4,
   canaryHoursMax: 24,
   canaryFailPct: 8,
@@ -168,6 +176,9 @@ export interface Ticket {
   deploying: boolean;
   rollbacks: number;
   comments: number; // apontamentos recebidos em review
+  conflicts: number; // conflitos de merge sofridos
+  awaitingMerge: boolean; // aprovada, mas a main está cheia
+  approvedAt: number;
   reworkHours: number; // horas gastas refatorando/corrigindo
   doneAt: number | null;
 }
@@ -257,6 +268,7 @@ function mulberry32(seed: number) {
 }
 
 export function stageKey(tk: Ticket): string {
+  if (tk.stage === 'review' && tk.awaitingMerge) return 'mergeQueue';
   if (tk.stage !== 'deploy') return tk.stage;
   return tk.tagId == null && tk.hotfixEnds == null ? 'main' : `deploy:${tk.envIndex}`;
 }
@@ -394,6 +406,7 @@ export class Sim {
 
     if (working) {
       this.updateMeeting();
+      this.flushMergeQueue();
       this.formSwarms();
       this.updateBugs(h);
       this.updateCoding(h);
@@ -429,6 +442,9 @@ export class Sim {
       deploying: false,
       rollbacks: 0,
       comments: 0,
+      conflicts: 0,
+      awaitingMerge: false,
+      approvedAt: 0,
       reworkHours: 0,
       doneAt: null,
       kind: 'feature',
@@ -542,6 +558,7 @@ export class Sim {
     this.move(tk, () => {
       tk.stage = 'review';
       tk.rework = false;
+      tk.awaitingMerge = false;
       tk.reviewRounds++;
       const urgent = tk.kind === 'bug'; // review prioritário: revisor pega na hora
       tk.reviews = picked.map((d) => ({
@@ -563,7 +580,7 @@ export class Sim {
       devId: author.id,
       ticketId: tk.id,
     });
-    if (k === 0) this.merge(tk);
+    if (k === 0) this.tryMerge(tk);
   }
 
   private updateReviews(h: number) {
@@ -588,7 +605,7 @@ export class Sim {
       } else {
         rv.done = true;
         this.emit('review-ok', `${dev.name} aprovou a PR #${tk.id}`, { devId: dev.id, ticketId: tk.id });
-        if (tk.reviews.every((r) => r.done)) this.merge(tk);
+        if (tk.reviews.every((r) => r.done)) this.tryMerge(tk);
       }
     }
     // Revisores pegando PRs que chegaram na vez deles
@@ -620,6 +637,7 @@ export class Sim {
       tk.rework = true;
       tk.devId = direct ? author!.id : null;
       tk.reviews = [];
+      tk.awaitingMerge = false;
       tk.deploying = false;
       tk.envIndex = 0;
       tk.tagId = null;
@@ -639,7 +657,55 @@ export class Sim {
     return Math.max(1, tk.workOriginal * this.uniform(minFrac, maxFrac));
   }
 
+  private mainFull() {
+    return this.cfg.maxMainPRs > 0 && this.inMain().length >= this.cfg.maxMainPRs;
+  }
+
+  /** Aprovada: mergeia se tiver vaga na main; senão entra na fila de merge. Hotfix não espera. */
+  private tryMerge(tk: Ticket) {
+    if (tk.kind === 'feature' && this.mainFull()) {
+      this.move(tk, () => {
+        tk.awaitingMerge = true;
+        tk.approvedAt = this.t;
+      });
+      this.emit('warn', `🔒 Main cheia (${this.inMain().length}/${this.cfg.maxMainPRs}): PR #${tk.id} aprovada, aguardando vaga pra merge`, {
+        ticketId: tk.id,
+      });
+      return;
+    }
+    this.merge(tk);
+  }
+
+  /** Abriu vaga na main (tag cortada): mergeia as aprovadas na ordem de aprovação. */
+  private flushMergeQueue() {
+    const queue = this.inStage('review')
+      .filter((tk) => tk.awaitingMerge)
+      .sort((a, b) => a.approvedAt - b.approvedAt);
+    for (const tk of queue) {
+      if (this.mainFull()) break;
+      if (tk.stage !== 'review' || !tk.awaitingMerge) continue; // pode ter conflitado no merge anterior
+      this.move(tk, () => (tk.awaitingMerge = false));
+      this.merge(tk);
+    }
+  }
+
+  /** Cada merge na main pode conflitar com PRs ainda não mergeadas: voltam pro autor e pra review. */
+  private rollConflicts(merged: Ticket) {
+    const open = this.inStage('review').filter((tk) => tk.kind === 'feature' && tk !== merged);
+    for (const tk of open) {
+      if (this.rand() * 100 >= this.cfg.conflictPct) continue;
+      tk.conflicts++;
+      const hours = this.uniform(this.cfg.conflictHoursMin, this.cfg.conflictHoursMax);
+      this.emit('review-changes', `⚔ Merge da #${merged.id} conflitou com a PR #${tk.id}: volta pra resolver (~${hours.toFixed(0)}h) e nova review`, {
+        devId: tk.author ?? undefined,
+        ticketId: tk.id,
+      });
+      this.sendBack(tk, hours);
+    }
+  }
+
   private merge(tk: Ticket) {
+    this.rollConflicts(tk);
     if (tk.kind === 'bug') {
       // hotfix: direto em produção, fora da janela noturna
       const base = [...this.tags].reverse().find((t) => t.status === 'done' || t.status === 'active');
@@ -855,6 +921,9 @@ export class Sim {
         deploying: false,
         rollbacks: 0,
         comments: 0,
+        conflicts: 0,
+        awaitingMerge: false,
+        approvedAt: 0,
         reworkHours: 0,
         doneAt: null,
         swarm: [],
@@ -949,6 +1018,7 @@ export class Sim {
       'Fila p/ dev': (tk) => tk.time.ready ?? 0,
       Desenvolvimento: (tk) => tk.time.doing ?? 0,
       'Code review': (tk) => tk.time.review ?? 0,
+      'Fila de merge': (tk) => tk.time.mergeQueue ?? 0,
       Main: (tk) => tk.time.main ?? 0,
       ...(this.firstProdEnv > 0 ? { 'Deploy pré-prod': (tk: Ticket) => this.deployTime(tk, false) } : {}),
       'Deploy produção': (tk) => this.deployTime(tk, true),
@@ -962,6 +1032,8 @@ export class Sim {
       stages: Object.entries(groups).map(([label, f]) => ({ label, days: avg(f) / 24 })),
       devTime: this.devTimeShare(),
       commentsPerPR: avg((tk) => tk.comments),
+      conflictsPerPR: avg((tk) => tk.conflicts),
+      mergeQueue: this.inStage('review').filter((tk) => tk.awaitingMerge).length,
       prsPerTag: (() => {
         const ts = this.tags.filter((t) => !t.hotfix && t.status === 'done' && t.doneAt! >= since);
         return ts.length ? ts.reduce((sum, t) => sum + t.ticketIds.length, 0) / ts.length : 0;

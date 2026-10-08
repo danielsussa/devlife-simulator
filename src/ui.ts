@@ -4,11 +4,15 @@ const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getEleme
 const hex = (c: number) => '#' + c.toString(16).padStart(6, '0');
 const esc = (s: string) => s.replace(/[&<>"]/g, (ch) => `&#${ch.charCodeAt(0)};`);
 const days = (hours: number) => (hours < 24 ? `${hours.toFixed(0)}h` : `${(hours / 24).toFixed(1)}d`);
-const SERIES = ['--s1', '--s2', '--s3', '--s4', '--s5', '--s6', '--s7'];
+const SERIES = ['--s1', '--s2', '--s3', '--s4', '--s5', '--s6', '--s7', '--s8'];
 
 export function renderClock(sim: Sim) {
   // largura fixa + status sempre presente (só some com visibility): a barra não pula
-  $('clock').innerHTML = `${formatClock(sim.t)} <span class="off ${sim.working ? 'hide' : ''}">· fora do expediente</span>`;
+  const weekend = Math.floor(sim.t / 24) % 7 >= 5;
+  const icon = weekend ? '🏖' : '🌙';
+  const el = $('clock');
+  el.innerHTML = `${formatClock(sim.t)} <span class="off ${sim.working ? 'hide' : ''}">${icon}</span>`;
+  el.title = sim.working ? 'Em expediente' : weekend ? 'Fim de semana' : 'Fora do expediente';
 }
 
 export function renderMetrics(sim: Sim) {
@@ -26,6 +30,8 @@ export function renderMetrics(sim: Sim) {
       <div class="tile"><div class="v">${Math.round(m.devTime.reworkOfCoding * 100)}%</div><div class="k">do código é refatoração</div></div>
       <div class="tile"><div class="v">${m.commentsPerPR.toFixed(1)}</div><div class="k">apontamentos por entrega</div></div>
       <div class="tile"><div class="v">${m.prsPerTag ? m.prsPerTag.toFixed(1) : '–'}</div><div class="k">PRs por tag (30d)</div></div>
+      <div class="tile"><div class="v">${m.conflictsPerPR.toFixed(1)}</div><div class="k">conflitos de merge por entrega</div></div>
+      <div class="tile"><div class="v">${m.mergeQueue}</div><div class="k">PRs aprovadas esperando vaga na main</div></div>
       <div class="tile ${m.openBugs ? 'alarm' : ''}"><div class="v">${m.openBugs ? '🐞 ' + m.openBugs : m.bugs}</div><div class="k">${m.openBugs ? 'bugs abertos agora!' : 'bugs em produção (30d)'}</div></div>
       <div class="tile"><div class="v">${m.mttrHours ? days(m.mttrHours) : '–'}</div><div class="k">tempo médio p/ corrigir bug</div></div>
       <div class="tile"><div class="v">${Math.round(m.devTime.bugfix * 100)}%</div><div class="k">do time apagando incêndio</div></div>
@@ -37,12 +43,12 @@ export function renderMetrics(sim: Sim) {
       ${
         m.doneCount
           ? `<div class="bar">${m.stages
-              .map((s, i) => `<div title="${s.label}: ${s.days.toFixed(1)}d" style="flex:${s.days / total};background:var(${SERIES[i]})"></div>`)
+              .map((s, i) => `<div title="${s.label}: ${s.days.toFixed(1)}d" style="flex:${s.days / total};background:var(${SERIES[i % SERIES.length]})"></div>`)
               .join('')}</div>
              <ul class="legend">${m.stages
                .map(
                  (s, i) =>
-                   `<li class="${s === top ? 'top' : ''}"><i style="background:var(${SERIES[i]})"></i>${s.label}<b>${s.days.toFixed(1)}d</b></li>`,
+                   `<li class="${s === top ? 'top' : ''}"><i style="background:var(${SERIES[i % SERIES.length]})"></i>${s.label}<b>${s.days.toFixed(1)}d</b></li>`,
                )
                .join('')}</ul>`
           : '<div class="more">Nenhuma entrega em produção ainda…</div>'
@@ -84,6 +90,7 @@ function card(sim: Sim, tk: Ticket): string {
         .filter(Boolean)
         .join(' · ');
       if (tk.reviewRounds > 1) meta += ` · rodada ${tk.reviewRounds}`;
+      if (tk.awaitingMerge) meta = `✔ aprovada · 🔒 main cheia (${sim.inMain().length}/${sim.cfg.maxMainPRs})`;
       extra = `<div class="m"><span>${names}</span></div>`;
       break;
     }
@@ -114,7 +121,8 @@ function card(sim: Sim, tk: Ticket): string {
   const badges = [
     tk.kind === 'bug' ? '<span class="badge bug">🐞 prioridade máxima</span>' : '',
     tk.rework ? '<span class="badge">🔧 refatorando</span>' : '',
-    tk.comments ? `<span class="badge">💬 ${tk.comments}</span>` : '', tk.rollbacks ? `<span class="badge">⚠ ${tk.rollbacks} rollback</span>` : '']
+    tk.comments ? `<span class="badge">💬 ${tk.comments}</span>` : '',
+    tk.conflicts ? `<span class="badge">⚔ ${tk.conflicts} conflito${tk.conflicts > 1 ? 's' : ''}</span>` : '', tk.rollbacks ? `<span class="badge">⚠ ${tk.rollbacks} rollback</span>` : '']
     .filter(Boolean)
     .join(' ');
   return `<div class="kcard ${tk.kind === 'bug' ? 'bug' : ''}" data-id="${tk.id}" style="border-color:${hex(tk.color)}">
@@ -156,13 +164,17 @@ export function renderKanban(sim: Sim) {
     title: `🏭 ${env.name}`,
     tags: sim.tags.filter((t) => t.status === 'active' && t.envIndex === i),
   }));
-  const cols: { title: string; items: Ticket[]; tags?: Tag[] }[] = [
+  const cols: { title: string; items: Ticket[]; tags?: Tag[]; count?: string }[] = [
     { title: 'Backlog', items: sim.inStage('backlog') },
     { title: 'Refinamento', items: sim.inStage('refining') },
     { title: 'Pronto p/ dev', items: sim.inStage('ready') },
     { title: 'Em dev', items: sim.inStage('doing') },
     { title: 'Code review', items: sim.inStage('review') },
-    { title: 'Main', items: sim.inMain() },
+    {
+      title: 'Main',
+      items: sim.inMain(),
+      count: sim.cfg.maxMainPRs > 0 ? `${sim.inMain().length}/${sim.cfg.maxMainPRs}` : undefined,
+    },
     ...tagCols.map((c) => ({ title: c.title, items: [], tags: c.tags })),
     {
       title: 'Entregue',
@@ -174,7 +186,7 @@ export function renderKanban(sim: Sim) {
   for (const c of cols) if (c.title !== 'Entregue') c.items.sort(bugFirst);
   $('kanban').innerHTML = cols
     .map(
-      (c) => `<div class="col"><h4>${c.title}<span>${c.tags ? `${c.tags.length} tag${c.tags.length === 1 ? '' : 's'}` : c.items.length}</span></h4><div class="cards">
+      (c) => `<div class="col"><h4>${c.title}<span>${c.tags ? `${c.tags.length} tag${c.tags.length === 1 ? '' : 's'}` : c.count ?? c.items.length}</span></h4><div class="cards">
         ${c.tags ? c.tags.map((t) => tagCard(sim, t)).join('') : ''}
         ${c.items.slice(0, LIMIT).map((tk) => card(sim, tk)).join('')}
         ${c.items.length > LIMIT ? `<div class="more">+${c.items.length - LIMIT}</div>` : ''}
@@ -220,6 +232,15 @@ const GROUPS: { title: string; fields: Field[] }[] = [
       { key: 'changesRequestedPct', label: '% de revisões com apontamento', min: 0, max: 100, step: 1 },
       { key: 'refactorPctMin', label: 'Refatoração mín (% do esforço)', min: 0, max: 200, step: 5 },
       { key: 'refactorPctMax', label: 'Refatoração máx (% do esforço)', min: 0, max: 200, step: 5 },
+    ],
+  },
+  {
+    title: 'Main e merge',
+    fields: [
+      { key: 'maxMainPRs', label: 'Máx. de PRs na main antes do deploy (0 = sem limite)', min: 0, max: 50, step: 1 },
+      { key: 'conflictPct', label: '% de conflito por PR aberta a cada merge', min: 0, max: 100, step: 1 },
+      { key: 'conflictHoursMin', label: 'Resolver conflito, mín (h)', min: 0.25, max: 40, step: 0.25 },
+      { key: 'conflictHoursMax', label: 'Resolver conflito, máx (h)', min: 0.25, max: 40, step: 0.25 },
     ],
   },
   {
