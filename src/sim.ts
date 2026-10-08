@@ -64,7 +64,7 @@ export const defaultConfig: Config = {
   changesRequestedPct: 20,
   refactorPctMin: 15,
   refactorPctMax: 40,
-  envs: ['dev', 'staging', 'P1', 'P2', 'P3'],
+  envs: ['P1', 'P2', 'P3'],
   prodEnvCount: 3,
   envsPerDay: 1,
   canaryHoursMin: 4,
@@ -671,7 +671,7 @@ export class Sim {
     });
 
     // Regra: no máximo `envsPerDay` ambientes por dia, priorizando o mais perto de produção.
-    if (this.cfg.deployAtNight ? !this.deploySession : !this.working) return;
+    if (this.cfg.deployAtNight ? !this.deploySession : !this.working || !this.isDeployDay(Math.floor(this.t / 24))) return;
     const day = this.deploySession ? Math.floor(this.deploySession.start / 24) : Math.floor(this.t / 24);
     if (day !== this.deployDay) {
       this.deployDay = day;
@@ -693,6 +693,12 @@ export class Sim {
       const who = this.deploySession ? `${this.devs[this.deploySession.devId].name} subiu ` : '';
       this.emit('info', `🌙 ${who}deploy em ${env.name}: ${waiting.map((tk) => '#' + tk.id).join(', ')} (canary ${hours.toFixed(0)}h)`);
     }
+  }
+
+  /** Regra de calendário: deploy de segunda a quinta (sexta só se liberado). */
+  isDeployDay(day: number) {
+    const dow = day % 7; // 0 = segunda
+    return dow <= 3 || (dow === 4 && this.cfg.deployOnFriday);
   }
 
   private waitingFor(envIndex: number) {
@@ -802,10 +808,10 @@ export class Sim {
     }
     if (!this.cfg.deployAtNight) return;
     const day = Math.floor(this.t / 24);
-    const dow = day % 7;
+
     if (this.t % 24 < this.cfg.deployHour || this.lastDeployNight === day) return;
     this.lastDeployNight = day;
-    if (dow > 4 || (dow === 4 && !this.cfg.deployOnFriday)) return;
+    if (!this.isDeployDay(day)) return;
     if (!this.hasDeployableEnv()) return;
     const devs = this.devs.filter((d) => d.role === 'dev');
     const dev = devs[this.rotation++ % devs.length];
@@ -829,7 +835,7 @@ export class Sim {
       'Fila p/ dev': (tk) => tk.time.ready ?? 0,
       Desenvolvimento: (tk) => tk.time.doing ?? 0,
       'Code review': (tk) => tk.time.review ?? 0,
-      'Deploy pré-prod': (tk) => this.deployTime(tk, false),
+      ...(this.firstProdEnv > 0 ? { 'Deploy pré-prod': (tk: Ticket) => this.deployTime(tk, false) } : {}),
       'Deploy produção': (tk) => this.deployTime(tk, true),
     };
     const lead = avg((tk) => tk.doneAt! - tk.createdAt);

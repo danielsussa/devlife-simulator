@@ -94,7 +94,10 @@ function card(sim: Sim, tk: Ticket): string {
         const p = (sim.t - env.startedAt) / (env.endsAt - env.startedAt);
         meta = `canary ${Math.round(p * 100)}% · faltam ${days(env.endsAt - sim.t)}`;
         extra = `<div class="prog canary"><div style="width:${p * 100}%"></div></div>`;
-      } else meta = sim.cfg.deployAtNight ? `🌙 aguarda janela ${sim.cfg.deployHour}h` : '⏳ na fila';
+      } else {
+        const dayRange = sim.cfg.deployOnFriday ? 'seg–sex' : 'seg–qui';
+        meta = sim.cfg.deployAtNight ? `🌙 aguarda janela ${sim.cfg.deployHour}h (${dayRange})` : `⏳ na fila (${dayRange})`;
+      }
       break;
     }
     case 'done':
@@ -197,7 +200,7 @@ const GROUPS: { title: string; fields: Field[] }[] = [
       { key: 'deployHour', label: 'Início da janela (h)', min: 18, max: 23.5, step: 0.5 },
       { key: 'deployHoursMin', label: 'Dev fica de madrugada, mín (h)', min: 0.5, max: 8, step: 0.5 },
       { key: 'deployHoursMax', label: 'Dev fica de madrugada, máx (h)', min: 0.5, max: 8, step: 0.5 },
-      { key: 'deployOnFriday', label: 'Permite deploy na sexta à noite' },
+      { key: 'deployOnFriday', label: 'Permite deploy na sexta (padrão: seg–qui)' },
     ],
   },
   {

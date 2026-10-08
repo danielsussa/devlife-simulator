@@ -149,7 +149,8 @@ export function buildLayout(envCount: number, prodCount: number): Layout {
   const firstProd = Math.max(0, envCount - Math.max(1, prodCount));
   const rackX = (i: number) => Math.round(13 + i * span + span / 2 - 1);
   // piso diferente embaixo dos racks de produção
-  fill(Math.max(12, rackX(firstProd) - 1), 16, 27, 22, 'prod');
+  const prodStart = firstProd === 0 ? 12 : Math.max(12, rackX(firstProd) - 1);
+  fill(prodStart, 16, 27, 22, 'prod');
   for (let i = 0; i < envCount; i++) {
     const rx = rackX(i);
     put(F.server, rx, 18);
@@ -165,7 +166,6 @@ export function buildLayout(envCount: number, prodCount: number): Layout {
   // console de deploy (onde o dev de plantão senta de madrugada)
   table(12, 13, 22);
   put(F.officeChair, 12, 21, false);
-  const prodStart = Math.max(12, rackX(firstProd) - 1);
   if (prodStart > 13) labels.push({ text: 'PRÉ-PROD', x: (12 + prodStart) / 2, y: 22.6 });
   labels.push({ text: 'PRODUÇÃO', x: (prodStart + 28) / 2, y: 22.6 });
   labels.push({ text: 'ENTREGUE', x: 30, y: 16.6 });
