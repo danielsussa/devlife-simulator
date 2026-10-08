@@ -1,5 +1,5 @@
 // Share the setup via URL: ?cfg=<base64url of a JSON with what differs from the defaults>
-import { Config, defaultConfig, defaultProfile, DevProfile } from './sim';
+import { Config, defaultConfig } from './sim';
 
 const PARAM = 'cfg';
 
@@ -19,17 +19,6 @@ function fromBase64Url(b64: string) {
 function diff(cfg: Config): Partial<Config> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(cfg)) {
-    if (k === 'devProfiles') {
-      // sparse: { "<dev index>": { only the changed fields } }
-      const sparse: Record<string, Partial<DevProfile>> = {};
-      (v as DevProfile[]).forEach((p, i) => {
-        const def = defaultProfile(i) as unknown as Record<string, unknown>;
-        const changed = Object.fromEntries(Object.entries(p).filter(([f, x]) => x !== def[f]));
-        if (Object.keys(changed).length) sparse[i] = changed;
-      });
-      if (Object.keys(sparse).length) out[k] = sparse;
-      continue;
-    }
     const d = (defaultConfig as unknown as Record<string, unknown>)[k];
     if (JSON.stringify(v) !== JSON.stringify(d)) out[k] = v;
   }
@@ -44,10 +33,6 @@ export function loadConfigFromUrl(cfg: Config): boolean {
     const data = JSON.parse(fromBase64Url(raw)) as Record<string, unknown>;
     const target = cfg as unknown as Record<string, unknown>;
     for (const [k, v] of Object.entries(data)) {
-      if (k === 'devProfiles') {
-        if (v && typeof v === 'object') applyProfiles(cfg, v as Record<string, unknown>);
-        continue;
-      }
       const d = (defaultConfig as unknown as Record<string, unknown>)[k];
       if (d === undefined) continue;
       if (Array.isArray(d)) {
@@ -58,22 +43,6 @@ export function loadConfigFromUrl(cfg: Config): boolean {
   } catch {
     console.warn('Invalid ?cfg= parameter, using defaults');
     return false;
-  }
-}
-
-function applyProfiles(cfg: Config, sparse: Record<string, unknown>) {
-  for (const [idx, raw] of Object.entries(sparse)) {
-    const i = Number(idx);
-    if (!Number.isInteger(i) || i < 0 || i >= cfg.devProfiles.length || !raw || typeof raw !== 'object') continue;
-    const target = { ...defaultProfile(i), ...cfg.devProfiles[i] } as unknown as Record<string, unknown>;
-    for (const [f, x] of Object.entries(raw)) {
-      const def = (defaultProfile(i) as unknown as Record<string, unknown>)[f];
-      if (def === undefined || typeof x !== typeof def) continue;
-      if (f === 'level' && !['junior', 'mid', 'senior'].includes(x as string)) continue;
-      if (typeof x === 'number' && !Number.isFinite(x)) continue;
-      target[f] = x;
-    }
-    cfg.devProfiles[i] = target as unknown as DevProfile;
   }
 }
 

@@ -5,11 +5,10 @@ import './style.css';
 import { OfficeScene } from './scene';
 import { defaultConfig, Sim } from './sim';
 import { loadConfigFromUrl, shareUrl, syncUrl } from './share';
-import { buildConfigForm, ic, normalizeProfiles, renderClock, renderKanban, renderLog, renderMetrics, renderTeam, renderTeamEditor, setupTeamEditor } from './ui';
+import { buildConfigForm, ic, renderClock, renderKanban, renderLog, renderMetrics, renderTeam } from './ui';
 
 const cfg = structuredClone(defaultConfig);
 loadConfigFromUrl(cfg); // setup shared via ?cfg=
-normalizeProfiles(cfg);
 syncUrl(cfg);
 let sim = new Sim(cfg);
 
@@ -87,11 +86,6 @@ document.getElementById('configClose')!.addEventListener('click', () => (drawer.
 buildConfigForm(cfg, (needsRestart) => {
   syncUrl(cfg);
   if (needsRestart) restart();
-  renderTeamEditor(cfg); // dev count may have changed
-});
-setupTeamEditor(cfg, () => {
-  syncUrl(cfg);
-  sim.syncProfiles();
 });
 
 const shareBtn = document.getElementById('shareBtn')!;

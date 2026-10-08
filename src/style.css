@@ -105,20 +105,20 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; min-height: 0
 .btn .fa-solid { margin-right: 3px; }
 .drawer legend .fa-solid { margin-right: 4px; }
 #side h3 .fa-solid { margin-right: 4px; }
-.devrow { background: var(--panel-2); border-radius: 7px; padding: 7px 8px; margin: 6px 0; }
-.devrow .r1 { display: grid; grid-template-columns: 1fr 100px; gap: 6px; }
-.devrow .r2 { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-top: 6px; }
-.devrow .r2 label { display: flex; flex-direction: column; gap: 2px; font-size: 10px; color: var(--text-2); white-space: nowrap; }
-.devrow input, .devrow select { background: var(--panel); border: 1px solid var(--line); color: var(--text); border-radius: 5px; padding: 3px 5px; font: inherit; width: 100%; min-width: 0; }
 table.team { width: 100%; border-collapse: collapse; font-size: 12px; font-variant-numeric: tabular-nums; }
 table.team th { color: var(--muted); font-weight: 500; text-align: left; padding: 2px 4px; font-size: 11px; }
 table.team td { padding: 3px 4px; border-top: 1px solid var(--line); color: var(--text-2); }
 table.team td:first-child { color: var(--text); }
 .lvl { font-size: 10px; padding: 1px 5px; border-radius: 4px; background: var(--panel-2); }
 .lvl.junior { color: #8fc1ff; } .lvl.mid { color: #cfcfcf; } .lvl.senior { color: #f2b33d; }
+.matrix { width: 100%; border-collapse: collapse; margin-top: 4px; }
+.matrix th { color: var(--muted); font-weight: 500; font-size: 11px; text-align: center; padding: 2px; }
+.matrix td { padding: 3px 2px; color: var(--text-2); }
+.matrix td:first-child { padding-right: 6px; }
+.matrix input { background: var(--panel-2); border: 1px solid var(--line); color: var(--text); border-radius: 5px; padding: 3px 5px; font: inherit; width: 64px; }
 .more { color: var(--muted); font-size: 11px; text-align: center; padding: 2px; }
 
-.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 420px; background: var(--panel); border-left: 1px solid var(--line); padding: 14px 16px; overflow-y: auto; z-index: 10; box-shadow: -10px 0 30px #0008; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 380px; background: var(--panel); border-left: 1px solid var(--line); padding: 14px 16px; overflow-y: auto; z-index: 10; box-shadow: -10px 0 30px #0008; }
 .drawer-head { display: flex; justify-content: space-between; align-items: center; }
 .drawer h2 { margin: 0; font-size: 16px; }
 .drawer fieldset { border: 0; border-top: 1px solid var(--line); padding: 10px 0 4px; margin: 10px 0 0; }

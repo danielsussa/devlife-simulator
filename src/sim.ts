@@ -5,34 +5,34 @@ const DEV_NAMES = ['Ana', 'Bruno', 'Carla', 'Diego', 'Elisa', 'Fábio', 'Gabi', 
 
 export type Level = 'junior' | 'mid' | 'senior';
 
-/** Per-developer traits. */
-export interface DevProfile {
-  name: string;
-  level: Level;
-  daysPerFeature: number; // average working days this dev takes for a feature
-  commentPct: number; // % of reviews of this dev's PRs that flag an issue (quality)
-  bugPct: number; // % of this dev's deliveries that cause a production bug
-  reviewPickup: number; // multiplier on how long this dev takes to pick up a review (1 = normal)
+/** Traits shared by every dev of a given level. */
+export interface LevelProfile {
+  daysPerFeature: number; // average working days for a feature
+  commentPct: number; // % of reviews of their PRs that flag an issue (quality)
+  bugPct: number; // % of their deliveries that cause a production bug
+  reviewPickup: number; // multiplier on how long they take to pick up a review (1 = normal)
 }
 
-export const LEVEL_PRESETS: Record<Level, Omit<DevProfile, 'name' | 'level'>> = {
-  junior: { daysPerFeature: 4.5, commentPct: 35, bugPct: 25, reviewPickup: 1.3 },
-  mid: { daysPerFeature: 3, commentPct: 20, bugPct: 15, reviewPickup: 1 },
-  senior: { daysPerFeature: 2, commentPct: 10, bugPct: 8, reviewPickup: 0.7 },
-};
-
+export const LEVELS: Level[] = ['junior', 'mid', 'senior'];
 export const MAX_DEVS = 8;
-const DEFAULT_LEVELS: Level[] = ['senior', 'mid', 'mid', 'junior', 'mid', 'senior', 'junior', 'mid'];
-
-export function defaultProfile(i: number): DevProfile {
-  const level = DEFAULT_LEVELS[i % DEFAULT_LEVELS.length];
-  return { name: DEV_NAMES[i % DEV_NAMES.length], level, ...LEVEL_PRESETS[level] };
-}
 
 export interface Config {
   seed: number;
-  devs: number;
-  devProfiles: DevProfile[]; // one per dev (index = dev id)
+  seniors: number; // team composition (total up to 8 devs)
+  mids: number;
+  juniors: number;
+  juniorDays: number; // avg working days per feature, by level
+  midDays: number;
+  seniorDays: number;
+  juniorCommentPct: number; // % of PRs that get review comments, by level
+  midCommentPct: number;
+  seniorCommentPct: number;
+  juniorBugPct: number; // % of deliveries with a production bug, by level
+  midBugPct: number;
+  seniorBugPct: number;
+  juniorPickup: number; // review pickup delay multiplier, by level
+  midPickup: number;
+  seniorPickup: number;
   techLeads: number; // don't pick features: they review, refine and attend the daily
   devApprovals: number; // dev approvals required per PR
   techLeadApprovals: number; // tech lead approvals required per PR
@@ -75,8 +75,21 @@ export interface Config {
 
 export const defaultConfig: Config = {
   seed: 42,
-  devs: 5,
-  devProfiles: Array.from({ length: MAX_DEVS }, (_, i) => defaultProfile(i)),
+  seniors: 1,
+  mids: 3,
+  juniors: 1,
+  juniorDays: 4.5,
+  midDays: 3,
+  seniorDays: 2,
+  juniorCommentPct: 35,
+  midCommentPct: 20,
+  seniorCommentPct: 10,
+  juniorBugPct: 25,
+  midBugPct: 15,
+  seniorBugPct: 8,
+  juniorPickup: 1.3,
+  midPickup: 1,
+  seniorPickup: 0.7,
   techLeads: 1,
   devApprovals: 1,
   techLeadApprovals: 1,
@@ -214,6 +227,7 @@ export interface Dev {
   id: number;
   name: string;
   role: Role;
+  level: Level;
   ticketId: number | null; // feature being coded (may be paused)
   pausedTicketId: number | null; // feature interrupted to refactor another one
   reviewTicketId: number | null;
@@ -345,11 +359,19 @@ export class Sim {
     this.envsDeployedToday = 0;
     this.rotation = 0;
     const tls = Math.min(this.cfg.techLeads, MAX_PEOPLE - 1);
-    const devs = Math.max(1, Math.min(this.cfg.devs, MAX_PEOPLE - tls));
+    // composition: seniors, then mids, then juniors (capped by the desks available)
+    const levels: Level[] = [
+      ...Array<Level>(Math.max(0, this.cfg.seniors)).fill('senior'),
+      ...Array<Level>(Math.max(0, this.cfg.mids)).fill('mid'),
+      ...Array<Level>(Math.max(0, this.cfg.juniors)).fill('junior'),
+    ].slice(0, Math.min(MAX_DEVS, MAX_PEOPLE - tls));
+    if (!levels.length) levels.push('mid');
+    const devs = levels.length;
     this.devs = Array.from({ length: devs + tls }, (_, i) => ({
       id: i,
       role: i < devs ? ('dev' as const) : ('techlead' as const),
-      name: i < devs ? this.profile(i).name : `${TL_NAMES[(i - devs) % TL_NAMES.length]} (TL)`,
+      level: i < devs ? levels[i] : ('senior' as Level),
+      name: i < devs ? DEV_NAMES[i % DEV_NAMES.length] : `${TL_NAMES[(i - devs) % TL_NAMES.length]} (TL)`,
       ticketId: null,
       reviewTicketId: null,
       reviewLeft: 0,
@@ -374,18 +396,24 @@ export class Sim {
     return i >= this.firstProdEnv;
   }
 
-  /** Profile of dev `id` (falls back to the default for that slot). */
-  profile(id: number): DevProfile {
-    return this.cfg.devProfiles[id] ?? defaultProfile(id);
+  /** Traits of a level, read live from the config. */
+  levelProfile(level: Level): LevelProfile {
+    const c = this.cfg;
+    return {
+      junior: { daysPerFeature: c.juniorDays, commentPct: c.juniorCommentPct, bugPct: c.juniorBugPct, reviewPickup: c.juniorPickup },
+      mid: { daysPerFeature: c.midDays, commentPct: c.midCommentPct, bugPct: c.midBugPct, reviewPickup: c.midPickup },
+      senior: { daysPerFeature: c.seniorDays, commentPct: c.seniorCommentPct, bugPct: c.seniorBugPct, reviewPickup: c.seniorPickup },
+    }[level];
   }
 
-  private authorProfile(tk: Ticket): DevProfile {
+  /** Traits of dev `id` (by their level). */
+  profile(id: number): LevelProfile & { level: Level } {
+    const level = this.devs[id]?.level ?? 'mid';
+    return { level, ...this.levelProfile(level) };
+  }
+
+  private authorProfile(tk: Ticket) {
     return this.profile(tk.author ?? 0);
-  }
-
-  /** Apply live profile edits (names) without restarting. */
-  syncProfiles() {
-    for (const d of this.devs) if (d.role === 'dev') d.name = this.profile(d.id).name;
   }
 
   get working() {

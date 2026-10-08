@@ -1,4 +1,4 @@
-import { Config, defaultProfile, DevProfile, formatClock, Level, LEVEL_PRESETS, MAX_DEVS, Sim, Tag, Ticket } from './sim';
+import { Config, formatClock, Sim, Tag, Ticket } from './sim';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const hex = (c: number) => '#' + c.toString(16).padStart(6, '0');
@@ -226,12 +226,15 @@ export function renderKanban(sim: Sim) {
 // ---- settings form -------------------------------------------------
 
 type Field = { key: keyof Config; label: string; min?: number; max?: number; step?: number; restart?: boolean };
-const GROUPS: { title: string; icon: string; fields: Field[] }[] = [
+type Matrix = { cols: string[]; rows: { label: string; keys: (keyof Config)[] }[] };
+const GROUPS: { title: string; icon: string; fields: Field[]; matrix?: Matrix }[] = [
   {
     title: 'Team and demand',
     icon: 'users',
     fields: [
-      { key: 'devs', label: 'Devs on the team', min: 1, max: 8, step: 1, restart: true },
+      { key: 'seniors', label: 'Senior devs', min: 0, max: 8, step: 1, restart: true },
+      { key: 'mids', label: 'Mid-level devs', min: 0, max: 8, step: 1, restart: true },
+      { key: 'juniors', label: 'Junior devs', min: 0, max: 8, step: 1, restart: true },
       { key: 'techLeads', label: 'Tech leads', min: 0, max: 2, step: 1, restart: true },
       { key: 'arrivalEveryDays', label: 'New demand every (days)', min: 0.1, max: 30, step: 0.1 },
       { key: 'dailyHour', label: 'Daily start time', min: 9, max: 17, step: 0.5 },
@@ -239,6 +242,25 @@ const GROUPS: { title: string; icon: string; fields: Field[] }[] = [
       { key: 'pickOnlyAtDaily', label: 'New tasks only pulled at the daily' },
       { key: 'refineHours', label: 'Refinement duration (h)', min: 0.5, max: 8, step: 0.5 },
       { key: 'refineBatch', label: 'Items per refinement', min: 1, max: 10, step: 1 },
+    ],
+  },
+  {
+    title: 'Developer levels',
+    icon: 'user-graduate',
+    matrix: {
+      cols: ['Junior', 'Mid', 'Senior'],
+      rows: [
+        { label: 'Days per feature', keys: ['juniorDays', 'midDays', 'seniorDays'] },
+        { label: '% PRs with review comments', keys: ['juniorCommentPct', 'midCommentPct', 'seniorCommentPct'] },
+        { label: '% deliveries with a bug', keys: ['juniorBugPct', 'midBugPct', 'seniorBugPct'] },
+        { label: 'Review pickup × (1 = normal)', keys: ['juniorPickup', 'midPickup', 'seniorPickup'] },
+      ],
+    },
+    fields: [
+      ...(['juniorDays', 'midDays', 'seniorDays'] as const).map((key) => ({ key, label: '', min: 0.25, max: 30, step: 0.25 })),
+      ...(['juniorCommentPct', 'midCommentPct', 'seniorCommentPct'] as const).map((key) => ({ key, label: '', min: 0, max: 100, step: 1 })),
+      ...(['juniorBugPct', 'midBugPct', 'seniorBugPct'] as const).map((key) => ({ key, label: '', min: 0, max: 100, step: 1 })),
+      ...(['juniorPickup', 'midPickup', 'seniorPickup'] as const).map((key) => ({ key, label: '', min: 0.1, max: 5, step: 0.1 })),
     ],
   },
   {
@@ -305,10 +327,21 @@ const GROUPS: { title: string; icon: string; fields: Field[] }[] = [
   },
 ];
 
+/** Compact table: one row per metric, one column per level. */
+function matrixHtml(cfg: Config, fields: Field[], m: Matrix) {
+  const input = (key: keyof Config) => {
+    const f = fields.find((x) => x.key === key)!;
+    return `<input type="number" name="${key}" value="${cfg[key]}" min="${f.min}" max="${f.max}" step="${f.step}">`;
+  };
+  return `<table class="matrix"><thead><tr><th></th>${m.cols.map((c) => `<th>${c}</th>`).join('')}</tr></thead><tbody>${m.rows
+    .map((r) => `<tr><td>${r.label}</td>${r.keys.map((k) => `<td>${input(k)}</td>`).join('')}</tr>`)
+    .join('')}</tbody></table>`;
+}
+
 export function buildConfigForm(cfg: Config, onChange: (restart: boolean) => void) {
   const form = $('configForm');
   form.innerHTML = GROUPS.map(
-    (g) => `<fieldset><legend>${ic(g.icon)} ${g.title}</legend>${g.fields
+    (g) => `<fieldset><legend>${ic(g.icon)} ${g.title}</legend>${g.matrix ? matrixHtml(cfg, g.fields, g.matrix) : g.fields
       .map((f) => {
         const v = cfg[f.key];
         if (typeof v === 'boolean')
@@ -340,68 +373,9 @@ export function buildConfigForm(cfg: Config, onChange: (restart: boolean) => voi
   });
 }
 
-// ---- per-developer profiles ---------------------------------------------------
+// ---- per-developer results ---------------------------------------------------
 
-const LEVELS: Level[] = ['junior', 'mid', 'senior'];
-const PROFILE_FIELDS: { key: keyof DevProfile; label: string; title: string; min: number; max: number; step: number }[] = [
-  { key: 'daysPerFeature', label: 'days/feature', title: 'Average working days this dev takes to build a feature', min: 0.25, max: 30, step: 0.25 },
-  { key: 'commentPct', label: 'comments %', title: '% of reviews of this dev’s PRs that flag an issue (refactor needed)', min: 0, max: 100, step: 1 },
-  { key: 'bugPct', label: 'bugs %', title: '% of this dev’s deliveries that cause a production bug', min: 0, max: 100, step: 1 },
-  { key: 'reviewPickup', label: 'pickup ×', title: 'Multiplier on how long this dev takes to pick up a review (1 = normal, 0.5 = twice as fast)', min: 0.1, max: 5, step: 0.1 },
-];
-
-/** Makes sure there is a full profile for every dev slot. */
-export function normalizeProfiles(cfg: Config) {
-  cfg.devProfiles = Array.from({ length: MAX_DEVS }, (_, i) => ({ ...defaultProfile(i), ...(cfg.devProfiles[i] ?? {}) }));
-}
-
-export function renderTeamEditor(cfg: Config) {
-  const n = Math.min(cfg.devs, MAX_DEVS);
-  $('teamEditor').innerHTML = `<fieldset><legend>${ic('user-gear')} Developers</legend>
-    ${cfg.devProfiles
-      .slice(0, n)
-      .map(
-        (p, i) => `<div class="devrow" data-i="${i}">
-          <div class="r1">
-            <input type="text" name="name" value="${esc(p.name)}" maxlength="14" aria-label="Name">
-            <select name="level" aria-label="Level">${LEVELS.map((l) => `<option value="${l}" ${l === p.level ? 'selected' : ''}>${l}</option>`).join('')}</select>
-          </div>
-          <div class="r2">${PROFILE_FIELDS.map(
-            (f) => `<label title="${esc(f.title)}"><span>${f.label}</span><input type="number" name="${f.key}" value="${p[f.key]}" min="${f.min}" max="${f.max}" step="${f.step}"></label>`,
-          ).join('')}</div>
-        </div>`,
-      )
-      .join('')}
-    <p class="hint">Picking a level fills in typical values; tweak any field. The feature size range below is calibrated for a mid-level dev.</p>
-  </fieldset>`;
-}
-
-export function setupTeamEditor(cfg: Config, onChange: () => void) {
-  const el = $('teamEditor');
-  el.addEventListener('change', (ev) => {
-    const input = ev.target as HTMLInputElement | HTMLSelectElement;
-    const row = input.closest<HTMLElement>('.devrow');
-    if (!row) return;
-    const p = cfg.devProfiles[Number(row.dataset.i)];
-    if (input.name === 'name') p.name = input.value.trim() || p.name;
-    else if (input.name === 'level') {
-      p.level = input.value as Level;
-      Object.assign(p, LEVEL_PRESETS[p.level]);
-      renderTeamEditor(cfg);
-    } else {
-      const f = PROFILE_FIELDS.find((x) => x.key === input.name);
-      if (!f) return;
-      const n = Math.min(f.max, Math.max(f.min, Number(input.value)));
-      if (Number.isNaN(n)) return;
-      (p as unknown as Record<string, number>)[f.key] = n;
-      input.value = String(n);
-    }
-    onChange();
-  });
-  renderTeamEditor(cfg);
-}
-
-/** Per-dev results, so the effect of each profile is visible. */
+/** Per-dev results, so the effect of each level is visible. */
 export function renderTeam(sim: Sim) {
   const since = sim.t - 30 * 24;
   const rows = sim.devs

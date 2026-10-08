@@ -7,8 +7,9 @@ release tags (1+ PRs) deployed at night by an on-call dev with time compensation
 production environment (P1 → P2 → P3, 1 environment per day, Monday to Thursday) and production bugs
 with a swarm, priority review and hotfix.
 
-Each developer has a profile (level junior/mid/senior, average days per feature, % of PRs with review comments,
-% of deliveries with a production bug, review pickup speed), and the sidebar shows per-dev results.
+The team is defined by its composition (seniors / mid-levels / juniors) and per-level traits (average days per
+feature, % of PRs with review comments, % of deliveries with a production bug, review pickup speed); the sidebar
+shows per-dev results.
 
 Everything is configurable (⚙ Settings, shareable via the URL) and the metrics show lead time, throughput, bottleneck,
 flow efficiency, idle time, rework, night hours and bug fix time.
