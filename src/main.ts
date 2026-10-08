@@ -2,9 +2,12 @@ import Phaser from 'phaser';
 import './style.css';
 import { OfficeScene } from './scene';
 import { defaultConfig, Sim } from './sim';
+import { loadConfigFromUrl, shareUrl, syncUrl } from './share';
 import { buildConfigForm, renderClock, renderKanban, renderLog, renderMetrics } from './ui';
 
 const cfg = structuredClone(defaultConfig);
+loadConfigFromUrl(cfg); // setup compartilhado via ?cfg=
+syncUrl(cfg);
 let sim = new Sim(cfg);
 
 const SPEEDS = [
@@ -78,7 +81,25 @@ document.getElementById('restart')!.addEventListener('click', restart);
 const drawer = document.getElementById('config')!;
 document.getElementById('configBtn')!.addEventListener('click', () => (drawer.hidden = !drawer.hidden));
 document.getElementById('configClose')!.addEventListener('click', () => (drawer.hidden = true));
-buildConfigForm(cfg, (needsRestart) => needsRestart && restart());
+buildConfigForm(cfg, (needsRestart) => {
+  syncUrl(cfg);
+  if (needsRestart) restart();
+});
+
+const shareBtn = document.getElementById('shareBtn')!;
+shareBtn.addEventListener('click', async () => {
+  const url = shareUrl(cfg);
+  try {
+    await navigator.clipboard.writeText(url);
+    shareBtn.textContent = '✓ Link copiado';
+  } catch {
+    prompt('Copie o link do setup:', url);
+  }
+  setTimeout(() => (shareBtn.textContent = '🔗 Compartilhar'), 1800);
+});
+document.getElementById('resetCfg')!.addEventListener('click', () => {
+  location.href = location.pathname; // sem ?cfg= volta ao padrão
+});
 
 // ---- kanban hover destaca a ticket no escritório ----
 const kanban = document.getElementById('kanban')!;
