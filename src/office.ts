@@ -147,7 +147,7 @@ export function buildLayout(envCount: number, prodCount: number): Layout {
 
   // --- Branch main: PRs mergeadas esperando a próxima tag ---
   table(23, 28, 13);
-  labels.push({ text: 'MAIN (SEM TAG)', x: 26, y: 14.2 });
+  labels.push({ text: 'MAIN', x: 26, y: 14.2 });
 
   // --- Infra: um rack por ambiente + área de produção ---
   const racks: Layout['racks'] = [];

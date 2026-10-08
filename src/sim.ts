@@ -949,7 +949,7 @@ export class Sim {
       'Fila p/ dev': (tk) => tk.time.ready ?? 0,
       Desenvolvimento: (tk) => tk.time.doing ?? 0,
       'Code review': (tk) => tk.time.review ?? 0,
-      'Main (sem tag)': (tk) => tk.time.main ?? 0,
+      Main: (tk) => tk.time.main ?? 0,
       ...(this.firstProdEnv > 0 ? { 'Deploy pré-prod': (tk: Ticket) => this.deployTime(tk, false) } : {}),
       'Deploy produção': (tk) => this.deployTime(tk, true),
     };

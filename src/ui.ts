@@ -162,7 +162,7 @@ export function renderKanban(sim: Sim) {
     { title: 'Pronto p/ dev', items: sim.inStage('ready') },
     { title: 'Em dev', items: sim.inStage('doing') },
     { title: 'Code review', items: sim.inStage('review') },
-    { title: 'Main (sem tag)', items: sim.inMain() },
+    { title: 'Main', items: sim.inMain() },
     ...tagCols.map((c) => ({ title: c.title, items: [], tags: c.tags })),
     {
       title: 'Entregue',
