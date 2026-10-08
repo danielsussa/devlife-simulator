@@ -281,7 +281,7 @@ export class OfficeScene extends Phaser.Scene {
 
   private updateCards(sim: Sim, dt: number) {
     const L = this.layout;
-    const counters = { backlog: 0, ready: 0, review: 0, done: 0, meeting: 0 };
+    const counters = { backlog: 0, ready: 0, review: 0, done: 0, meeting: 0, main: 0 };
     const queue = sim.envs.map(() => 0);
     const canary = sim.envs.map(() => 0);
     const highlight = this.hooks.highlightId();
@@ -328,6 +328,10 @@ export class OfficeScene extends Phaser.Scene {
           else overflow.review++;
           break;
         case 'deploy': {
+          if (tk.tagId == null && tk.hotfixEnds == null) {
+            target = counters.main < L.mainCapacity ? L.mainCard(counters.main++) : null;
+            break;
+          }
           const r = L.racks[tk.envIndex];
           target = tk.deploying ? r.canaryCard(canary[tk.envIndex]++) : r.queueCard(queue[tk.envIndex]++);
           break;
@@ -422,7 +426,7 @@ export class OfficeScene extends Phaser.Scene {
       if (env.batch.length) {
         const p = Phaser.Math.Clamp((sim.t - env.startedAt) / (env.endsAt - env.startedAt), 0, 1);
         g.fillStyle(0xf2b33d, 1).fillRoundedRect(x, y, 28 * p, 3, 1.5);
-        this.rackTexts[i].setText(`${env.name.toUpperCase()}\n${Math.round(p * 100)}%`);
+        this.rackTexts[i].setText(`${env.name.toUpperCase()}\n${sim.tag(env.tagId)?.name ?? ''} ${Math.round(p * 100)}%`);
       } else {
         const recent = env.result && sim.t - env.resultAt < 3;
         if (recent) g.fillStyle(env.result === 'ok' ? 0x35c46a : 0xe5484d, 1).fillRoundedRect(x, y, 28, 3, 1.5);

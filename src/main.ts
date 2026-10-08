@@ -86,7 +86,7 @@ const kanban = document.getElementById('kanban')!;
 let mouse: { x: number; y: number } | null = null;
 const pickHighlight = () => {
   const el = mouse && document.elementFromPoint(mouse.x, mouse.y);
-  const c = el instanceof HTMLElement ? el.closest<HTMLElement>('#kanban .kcard') : null;
+  const c = el instanceof HTMLElement ? el.closest<HTMLElement>('#kanban .pr, #kanban .kcard[data-id]') : null;
   highlightId = c ? Number(c.dataset.id) : null;
 };
 kanban.addEventListener('mousemove', (e) => {

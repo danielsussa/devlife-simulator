@@ -1,4 +1,4 @@
-import { Config, formatClock, Sim, Ticket } from './sim';
+import { Config, formatClock, Sim, Tag, Ticket } from './sim';
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const hex = (c: number) => '#' + c.toString(16).padStart(6, '0');
@@ -25,6 +25,7 @@ export function renderMetrics(sim: Sim) {
       <div class="tile"><div class="v">${Math.round(m.devTime.meetings * 100)}%</div><div class="k">em daily + refinamento</div></div>
       <div class="tile"><div class="v">${Math.round(m.devTime.reworkOfCoding * 100)}%</div><div class="k">do código é refatoração</div></div>
       <div class="tile"><div class="v">${m.commentsPerPR.toFixed(1)}</div><div class="k">apontamentos por entrega</div></div>
+      <div class="tile"><div class="v">${m.prsPerTag ? m.prsPerTag.toFixed(1) : '–'}</div><div class="k">PRs por tag (30d)</div></div>
       <div class="tile ${m.openBugs ? 'alarm' : ''}"><div class="v">${m.openBugs ? '🐞 ' + m.openBugs : m.bugs}</div><div class="k">${m.openBugs ? 'bugs abertos agora!' : 'bugs em produção (30d)'}</div></div>
       <div class="tile"><div class="v">${m.mttrHours ? days(m.mttrHours) : '–'}</div><div class="k">tempo médio p/ corrigir bug</div></div>
       <div class="tile"><div class="v">${Math.round(m.devTime.bugfix * 100)}%</div><div class="k">do time apagando incêndio</div></div>
@@ -87,6 +88,10 @@ function card(sim: Sim, tk: Ticket): string {
       break;
     }
     case 'deploy': {
+      if (tk.tagId == null && tk.hotfixEnds == null) {
+        meta = '🏷 aguarda próxima tag';
+        break;
+      }
       const env = sim.envs[tk.envIndex];
       if (tk.hotfixEnds != null) {
         meta = `🚑 hotfix · faltam ${days(Math.max(0, tk.hotfixEnds - sim.t))}`;
@@ -101,7 +106,7 @@ function card(sim: Sim, tk: Ticket): string {
       break;
     }
     case 'done':
-      meta = `lead ${days(tk.doneAt! - tk.createdAt)}`;
+      meta = `lead ${days(tk.doneAt! - tk.createdAt)}${tk.tagId != null ? ' · ' + (sim.tag(tk.tagId)?.name ?? '') : ''}`;
       break;
     default:
       meta = dev ?? '';
@@ -119,17 +124,46 @@ function card(sim: Sim, tk: Ticket): string {
   </div>`;
 }
 
+function tagCard(sim: Sim, tag: Tag): string {
+  const env = sim.envs[tag.envIndex];
+  const prs = tag.ticketIds.map((id) => sim.ticket(id)!);
+  const hasBug = prs.some((tk) => tk.kind === 'bug');
+  let meta: string;
+  let extra = '';
+  if (tag.hotfix) {
+    const tk = prs[0];
+    meta = `🚑 hotfix · faltam ${days(Math.max(0, (tk.hotfixEnds ?? sim.t) - sim.t))}`;
+  } else if (tag.deploying) {
+    const p = (sim.t - env.startedAt) / (env.endsAt - env.startedAt);
+    meta = `canary ${Math.round(p * 100)}% · faltam ${days(env.endsAt - sim.t)}`;
+    extra = `<div class="prog canary"><div style="width:${p * 100}%"></div></div>`;
+  } else {
+    const dayRange = sim.cfg.deployOnFriday ? 'seg–sex' : 'seg–qui';
+    meta = sim.cfg.deployAtNight ? `🌙 aguarda janela ${sim.cfg.deployHour}h (${dayRange})` : `⏳ na fila (${dayRange})`;
+  }
+  const chips = prs
+    .map((tk) => `<span class="pr" data-id="${tk.id}" style="border-color:${hex(tk.color)}">#${tk.id}</span>`)
+    .join('');
+  return `<div class="kcard tag ${hasBug ? 'bug' : ''}">
+    <div class="t"><b>🏷 ${esc(tag.name)}</b>${prs.length} PR${prs.length > 1 ? 's' : ''}${tag.includes.length ? ` · inclui ${esc(tag.includes.join(', '))}` : ''}</div>
+    <div class="m"><span>${meta}</span><span>${days(sim.t - tag.createdAt)}</span></div>
+    <div class="prs">${chips}</div>${extra}
+  </div>`;
+}
+
 export function renderKanban(sim: Sim) {
-  const cols: { title: string; items: Ticket[] }[] = [
+  const tagCols = sim.envs.map((env, i) => ({
+    title: `🏭 ${env.name}`,
+    tags: sim.tags.filter((t) => t.status === 'active' && t.envIndex === i),
+  }));
+  const cols: { title: string; items: Ticket[]; tags?: Tag[] }[] = [
     { title: 'Backlog', items: sim.inStage('backlog') },
     { title: 'Refinamento', items: sim.inStage('refining') },
     { title: 'Pronto p/ dev', items: sim.inStage('ready') },
     { title: 'Em dev', items: sim.inStage('doing') },
     { title: 'Code review', items: sim.inStage('review') },
-    ...sim.envs.map((env, i) => ({
-      title: `${sim.isProdEnv(i) ? '🏭 ' : 'Deploy '}${env.name}`,
-      items: sim.tickets.filter((tk) => tk.stage === 'deploy' && tk.envIndex === i),
-    })),
+    { title: 'Main (sem tag)', items: sim.inMain() },
+    ...tagCols.map((c) => ({ title: c.title, items: [], tags: c.tags })),
     {
       title: 'Entregue',
       items: sim.inStage('done').sort((a, b) => b.doneAt! - a.doneAt!),
@@ -140,7 +174,8 @@ export function renderKanban(sim: Sim) {
   for (const c of cols) if (c.title !== 'Entregue') c.items.sort(bugFirst);
   $('kanban').innerHTML = cols
     .map(
-      (c) => `<div class="col"><h4>${c.title}<span>${c.items.length}</span></h4><div class="cards">
+      (c) => `<div class="col"><h4>${c.title}<span>${c.tags ? `${c.tags.length} tag${c.tags.length === 1 ? '' : 's'}` : c.items.length}</span></h4><div class="cards">
+        ${c.tags ? c.tags.map((t) => tagCard(sim, t)).join('') : ''}
         ${c.items.slice(0, LIMIT).map((tk) => card(sim, tk)).join('')}
         ${c.items.length > LIMIT ? `<div class="more">+${c.items.length - LIMIT}</div>` : ''}
       </div></div>`,

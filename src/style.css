@@ -86,6 +86,11 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; min-height: 0
 .kcard .badge.bug { color: #ff8a8a; }
 .tile.alarm { background: #4a1d22; animation: pulse 1s ease-in-out infinite alternate; }
 @keyframes pulse { from { box-shadow: 0 0 0 0 #e5484d00; } to { box-shadow: 0 0 0 2px #e5484d; } }
+.kcard.tag { border-left-color: var(--warn); }
+.kcard.tag .t b { color: var(--warn); }
+.kcard .prs { display: flex; flex-wrap: wrap; gap: 3px; margin-top: 4px; }
+.kcard .prs .pr { font-size: 10px; padding: 0 4px; border-radius: 3px; border-left: 3px solid; background: var(--panel); color: var(--text-2); }
+.kcard .prs .pr:hover { outline: 1px solid var(--accent); }
 .more { color: var(--muted); font-size: 11px; text-align: center; padding: 2px; }
 
 .drawer { position: fixed; top: 0; right: 0; bottom: 0; width: 340px; background: var(--panel); border-left: 1px solid var(--line); padding: 14px 16px; overflow-y: auto; z-index: 10; box-shadow: -10px 0 30px #0008; }

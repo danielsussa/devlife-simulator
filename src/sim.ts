@@ -94,6 +94,15 @@ export function isWorkingTime(t: number): boolean {
   return day % 7 < 5 && h >= DAY_START && h < DAY_END;
 }
 
+/** v1.4 → v1.4.1 → v1.4.2 (sem repetir nome já usado). */
+function patchName(name: string, tags: Tag[]) {
+  const m = name.match(/^(v\d+\.\d+)(?:\.(\d+))?/);
+  const base = m ? m[1] : name;
+  let n = m && m[2] ? Number(m[2]) + 1 : 1;
+  while (tags.some((t) => t.name === `${base}.${n}`)) n++;
+  return `${base}.${n}`;
+}
+
 function days(hours: number) {
   return hours < 24 ? `${hours.toFixed(1)}h` : `${(hours / 24).toFixed(1)}d`;
 }
@@ -139,6 +148,7 @@ export interface Ticket {
   bugAt: number | null; // feature: quando o bug vai aparecer em produção (se tiver)
   swarm: number[]; // bug: devs no mutirão
   hotfixEnds: number | null;
+  tagId: number | null; // tag (release) em que a PR está
   title: string;
   color: number;
   stage: Stage;
@@ -182,8 +192,23 @@ export interface DeploySession {
   envs: Set<string>;
 }
 
+/** Release: snapshot da main que vai pra produção. Contém 1+ PRs e anda P1 → P2 → P3 como unidade. */
+export interface Tag {
+  id: number;
+  name: string;
+  ticketIds: number[];
+  envIndex: number; // próximo ambiente (ou o que está em canary)
+  deploying: boolean;
+  createdAt: number;
+  doneAt: number | null;
+  status: 'active' | 'done' | 'merged' | 'rolledback';
+  includes: string[]; // tags mais antigas absorvidas (tags são cumulativas)
+  hotfix: boolean;
+}
+
 export interface Env {
   name: string;
+  tagId: number | null; // tag em canary neste ambiente
   batch: number[];
   startedAt: number;
   endsAt: number;
@@ -232,7 +257,8 @@ function mulberry32(seed: number) {
 }
 
 export function stageKey(tk: Ticket): string {
-  return tk.stage === 'deploy' ? `deploy:${tk.envIndex}` : tk.stage;
+  if (tk.stage !== 'deploy') return tk.stage;
+  return tk.tagId == null && tk.hotfixEnds == null ? 'main' : `deploy:${tk.envIndex}`;
 }
 
 export class Sim {
@@ -244,6 +270,9 @@ export class Sim {
   meeting: Meeting | null = null;
   devHours = emptyHours();
   deploySession: DeploySession | null = null;
+  tags: Tag[] = [];
+  private releaseSeq = 0;
+  private nextTagId = 1;
   nightHours = 0; // horas de madrugada acumuladas em deploys
   private lastDeployNight = -1;
   private deployDay = -1; // "dia de deploy" corrente (a janela noturna conta pro dia em que começou)
@@ -269,6 +298,9 @@ export class Sim {
     this.nextId = 1;
     this.devHours = emptyHours();
     this.deploySession = null;
+    this.tags = [];
+    this.releaseSeq = 0;
+    this.nextTagId = 1;
     this.nightHours = 0;
     this.lastDeployNight = -1;
     this.deployDay = -1;
@@ -289,7 +321,7 @@ export class Sim {
       bugId: null,
     }));
     this.envs = this.cfg.envs.map((name) => ({
-      name, batch: [], startedAt: 0, endsAt: 0, fail: false, result: null, resultAt: -1,
+      name, tagId: null, batch: [], startedAt: 0, endsAt: 0, fail: false, result: null, resultAt: -1,
     }));
     for (let i = 0; i < 4; i++) this.spawn();
     this.nextArrival = this.t + this.expo(this.cfg.arrivalEveryDays * 24);
@@ -404,6 +436,7 @@ export class Sim {
       bugAt: null,
       swarm: [],
       hotfixEnds: null,
+      tagId: null,
     };
     this.tickets.push(tk);
     return tk;
@@ -589,6 +622,7 @@ export class Sim {
       tk.reviews = [];
       tk.deploying = false;
       tk.envIndex = 0;
+      tk.tagId = null;
       tk.workDone = 0;
       tk.workTotal = hours;
     });
@@ -608,15 +642,19 @@ export class Sim {
   private merge(tk: Ticket) {
     if (tk.kind === 'bug') {
       // hotfix: direto em produção, fora da janela noturna
+      const base = [...this.tags].reverse().find((t) => t.status === 'done' || t.status === 'active');
+      const tag = this.newTag(base ? patchName(base.name, this.tags) : 'v1.0.1', [tk], this.envs.length - 1, true);
+      tag.deploying = true;
       this.move(tk, () => {
         tk.stage = 'deploy';
         tk.envIndex = this.envs.length - 1;
         tk.deploying = true;
         tk.devId = null;
+        tk.tagId = tag.id;
         tk.hotfixEnds = this.t + this.cfg.hotfixHours;
       });
       const prod = this.envs.slice(this.firstProdEnv).map((e) => e.name).join(', ');
-      this.emit('warn', `🚑 Hotfix #${tk.id} aprovado, subindo direto em ${prod} (fora da regra de 1 ambiente/dia)`, { ticketId: tk.id });
+      this.emit('warn', `🚑 Hotfix #${tk.id} aprovado: tag ${tag.name} subindo direto em ${prod} (fora da regra de 1 ambiente/dia)`, { ticketId: tk.id });
       return;
     }
     this.move(tk, () => {
@@ -624,8 +662,9 @@ export class Sim {
       tk.envIndex = 0;
       tk.deploying = false;
       tk.devId = null;
+      tk.tagId = null;
     });
-    this.emit('good', `PR #${tk.id} mergeada na main`, { ticketId: tk.id });
+    this.emit('good', `PR #${tk.id} mergeada na main (aguarda a próxima tag)`, { ticketId: tk.id });
   }
 
   private updateDeploys() {
@@ -636,21 +675,44 @@ export class Sim {
         tk.doneAt = this.t;
         tk.deploying = false;
       });
+      const ht = this.tag(tk.tagId);
+      if (ht) {
+        ht.status = 'done';
+        ht.deploying = false;
+        ht.doneAt = this.t;
+      }
       this.emit('good', `✅ Bug #${tk.id} corrigido em produção (${days(tk.doneAt! - tk.createdAt)} desde que apareceu)`, { ticketId: tk.id });
     }
     this.envs.forEach((env, i) => {
-      if (env.batch.length && this.t >= env.endsAt) {
-        const batch = env.batch.map((id) => this.ticket(id)!);
+      if (env.tagId != null && this.t >= env.endsAt) {
+        const tag = this.tag(env.tagId)!;
+        const batch = tag.ticketIds.map((id) => this.ticket(id)!);
         env.batch = [];
+        env.tagId = null;
         env.result = env.fail ? 'fail' : 'ok';
         env.resultAt = this.t;
+        tag.deploying = false;
         if (env.fail) {
+          // rollback da tag inteira; a PR culpada é revertida e o resto vira uma tag de patch que recomeça no P1
           const culprit = batch[Math.floor(this.rand() * batch.length)];
           culprit.rollbacks++;
+          tag.status = 'rolledback';
           for (const tk of batch) tk.deploying = false;
-          this.emit('bad', `Canary falhou em ${env.name}! Rollback. #${culprit.id} volta pra correção`, { ticketId: culprit.id });
           this.sendBack(culprit, this.reworkHoursFor(culprit, 0.1, 0.3));
+          const rest = batch.filter((tk) => tk !== culprit);
+          const patch = rest.length ? this.newTag(patchName(tag.name, this.tags), rest, 0, false) : null;
+          if (patch) for (const tk of rest) this.move(tk, () => ((tk.tagId = patch.id), (tk.envIndex = 0)));
+          this.emit(
+            'bad',
+            `Canary da ${tag.name} falhou em ${env.name}! Rollback, #${culprit.id} revertida${patch ? `; ${patch.name} recomeça no ${this.envs[0].name}` : ''}`,
+            { ticketId: culprit.id },
+          );
         } else {
+          tag.envIndex++;
+          if (tag.envIndex >= this.envs.length) {
+            tag.status = 'done';
+            tag.doneAt = this.t;
+          }
           for (const tk of batch) {
             this.move(tk, () => {
               tk.deploying = false;
@@ -664,8 +726,8 @@ export class Sim {
               }
             });
           }
-          const tag = i === this.envs.length - 1 ? ' ✅ entregue em todos os ambientes' : i === this.firstProdEnv ? ' 🚀 em produção' : '';
-          this.emit('good', `Canary ok em ${env.name}: ${batch.map((tk) => '#' + tk.id).join(', ')}${tag}`);
+          const suffix = i === this.envs.length - 1 ? ' ✅ entregue em todos os ambientes' : i === this.firstProdEnv ? ' 🚀 em produção' : '';
+          this.emit('good', `Canary ok da ${tag.name} em ${env.name} (${batch.map((tk) => '#' + tk.id).join(', ')})${suffix}`);
         }
       }
     });
@@ -679,19 +741,42 @@ export class Sim {
     }
     for (let i = this.envs.length - 1; i >= 0 && this.envsDeployedToday < this.cfg.envsPerDay; i--) {
       const env = this.envs[i];
-      if (env.batch.length) continue;
-      const waiting = this.waitingFor(i);
+      if (env.tagId != null) continue;
+      const waiting = this.tagsWaiting(i);
+      if (i === 0) {
+        // corte de release: tudo que está na main vira uma tag nova
+        const main = this.inMain();
+        if (main.length) {
+          const tag = this.newTag(`v1.${++this.releaseSeq}`, main, 0, false);
+          for (const tk of main) this.move(tk, () => ((tk.tagId = tag.id), (tk.envIndex = 0)));
+          this.emit('info', `🏷 Tag ${tag.name} cortada da main com ${main.map((tk) => '#' + tk.id).join(', ')}`);
+          waiting.push(tag);
+        }
+      }
       if (!waiting.length) continue;
+      // tags são cumulativas: sobe a mais nova, que já contém as anteriores na fila deste ambiente
+      const tag = waiting[waiting.length - 1];
+      for (const old of waiting.slice(0, -1)) {
+        old.status = 'merged';
+        tag.includes.push(old.name, ...old.includes);
+        for (const id of old.ticketIds) this.ticket(id)!.tagId = tag.id;
+        tag.ticketIds.push(...old.ticketIds);
+        old.ticketIds = [];
+      }
       this.envsDeployedToday++;
       const hours = Math.min(24, this.uniform(this.cfg.canaryHoursMin, this.cfg.canaryHoursMax));
-      for (const tk of waiting) tk.deploying = true;
-      env.batch = waiting.map((tk) => tk.id);
+      const batch = tag.ticketIds.map((id) => this.ticket(id)!);
+      for (const tk of batch) tk.deploying = true;
+      tag.deploying = true;
+      env.tagId = tag.id;
+      env.batch = [...tag.ticketIds];
       env.startedAt = this.t;
       env.endsAt = this.t + hours;
       env.fail = this.rand() * 100 < this.cfg.canaryFailPct;
       this.deploySession?.envs.add(env.name);
       const who = this.deploySession ? `${this.devs[this.deploySession.devId].name} subiu ` : '';
-      this.emit('info', `🌙 ${who}deploy em ${env.name}: ${waiting.map((tk) => '#' + tk.id).join(', ')} (canary ${hours.toFixed(0)}h)`);
+      const inc = tag.includes.length ? ` (inclui ${tag.includes.join(', ')})` : '';
+      this.emit('info', `🌙 ${who}${tag.name}${inc} em ${env.name}: ${batch.length} PRs (canary ${hours.toFixed(0)}h)`);
     }
   }
 
@@ -701,13 +786,41 @@ export class Sim {
     return dow <= 3 || (dow === 4 && this.cfg.deployOnFriday);
   }
 
-  private waitingFor(envIndex: number) {
-    return this.tickets.filter((tk) => tk.stage === 'deploy' && tk.envIndex === envIndex && !tk.deploying);
+  tag(id: number | null | undefined) {
+    return id == null ? undefined : this.tags.find((t) => t.id === id);
+  }
+
+  /** PRs mergeadas que ainda não entraram em nenhuma tag. */
+  inMain() {
+    return this.tickets.filter((tk) => tk.stage === 'deploy' && tk.tagId == null && tk.hotfixEnds == null);
+  }
+
+  tagsWaiting(envIndex: number) {
+    return this.tags.filter((t) => t.status === 'active' && !t.hotfix && t.envIndex === envIndex && !t.deploying);
+  }
+
+  private newTag(name: string, tickets: Ticket[], envIndex: number, hotfix: boolean): Tag {
+    const tag: Tag = {
+      id: this.nextTagId++,
+      name,
+      ticketIds: tickets.map((tk) => tk.id),
+      envIndex,
+      deploying: false,
+      createdAt: this.t,
+      doneAt: null,
+      status: 'active',
+      includes: [],
+      hotfix,
+    };
+    this.tags.push(tag);
+    return tag;
   }
 
   /** Tem algum ambiente livre com coisa esperando? (senão nem precisa ficar de plantão) */
   private hasDeployableEnv() {
-    return this.envs.some((env, i) => !env.batch.length && this.waitingFor(i).length > 0);
+    return this.envs.some(
+      (env, i) => env.tagId == null && (this.tagsWaiting(i).length > 0 || (i === 0 && this.inMain().length > 0)),
+    );
   }
 
   // ---- bugs em produção ---------------------------------------------------------
@@ -746,6 +859,7 @@ export class Sim {
         doneAt: null,
         swarm: [],
         hotfixEnds: null,
+        tagId: null,
       };
       this.tickets.push(bug);
       this.emit('bad', `🐞 BUG em produção na #${f.id} "${f.title}"! Abrindo #${id}`, { ticketId: id });
@@ -835,6 +949,7 @@ export class Sim {
       'Fila p/ dev': (tk) => tk.time.ready ?? 0,
       Desenvolvimento: (tk) => tk.time.doing ?? 0,
       'Code review': (tk) => tk.time.review ?? 0,
+      'Main (sem tag)': (tk) => tk.time.main ?? 0,
       ...(this.firstProdEnv > 0 ? { 'Deploy pré-prod': (tk: Ticket) => this.deployTime(tk, false) } : {}),
       'Deploy produção': (tk) => this.deployTime(tk, true),
     };
@@ -847,6 +962,10 @@ export class Sim {
       stages: Object.entries(groups).map(([label, f]) => ({ label, days: avg(f) / 24 })),
       devTime: this.devTimeShare(),
       commentsPerPR: avg((tk) => tk.comments),
+      prsPerTag: (() => {
+        const ts = this.tags.filter((t) => !t.hotfix && t.status === 'done' && t.doneAt! >= since);
+        return ts.length ? ts.reduce((sum, t) => sum + t.ticketIds.length, 0) / ts.length : 0;
+      })(),
       bugs: bugs.length,
       openBugs: this.tickets.filter((tk) => tk.kind === 'bug' && tk.stage !== 'done').length,
       mttrHours: fixed.length ? fixed.reduce((sum, tk) => sum + (tk.doneAt! - tk.createdAt), 0) / fixed.length : 0,

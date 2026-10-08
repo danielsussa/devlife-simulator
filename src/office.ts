@@ -42,6 +42,8 @@ export interface Layout {
   reviewCard: (i: number) => Pt;
   reviewCapacity: number;
   racks: { label: Pt; bar: Pt; canaryCard: (i: number) => Pt; queueCard: (i: number) => Pt }[];
+  mainCard: (i: number) => Pt;
+  mainCapacity: number;
   doneCard: (i: number) => Pt;
   doneCapacity: number;
   door: Pt;
@@ -143,6 +145,10 @@ export function buildLayout(envCount: number, prodCount: number): Layout {
   table(27, 31, 8);
   labels.push({ text: 'CODE REVIEW', x: 29.5, y: 11.6 });
 
+  // --- Branch main: PRs mergeadas esperando a próxima tag ---
+  table(23, 28, 13);
+  labels.push({ text: 'MAIN (SEM TAG)', x: 26, y: 14.2 });
+
   // --- Infra: um rack por ambiente + área de produção ---
   const racks: Layout['racks'] = [];
   const span = 15 / Math.max(1, envCount);
@@ -196,6 +202,8 @@ export function buildLayout(envCount: number, prodCount: number): Layout {
     reviewCard: slots(27.4, 5.35, 7, 0.65, 3),
     reviewCapacity: 14,
     racks,
+    mainCard: slots(23.3, 13.35, 11, 0.5, 0.35),
+    mainCapacity: 22,
     doneCard: slots(28.5, 17.6, 8, 0.5, 0.55),
     doneCapacity: 64,
     door: { x: 33.5, y: 12.5 },
