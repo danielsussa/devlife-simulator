@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="pt-BR">
+<html lang="en">
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
@@ -12,28 +12,28 @@
         <div class="brand">DevLife <span>Simulator</span></div>
         <div id="clock" class="clock"></div>
         <div id="speeds" class="speeds"></div>
-        <label class="toggle"><input type="checkbox" id="fastNights" checked /> acelerar noites</label>
-        <button id="restart" class="btn">↻ Reiniciar</button>
-        <button id="shareBtn" class="btn" title="Copia um link com os parâmetros atuais">🔗 Compartilhar</button>
-        <button id="configBtn" class="btn">⚙ Parâmetros</button>
+        <label class="toggle"><input type="checkbox" id="fastNights" checked /> fast-forward nights</label>
+        <button id="restart" class="btn">↻ Restart</button>
+        <button id="shareBtn" class="btn" title="Copy a link with the current settings">🔗 Share</button>
+        <button id="configBtn" class="btn">⚙ Settings</button>
       </header>
       <main>
         <section id="stage"></section>
         <aside id="side">
           <div id="metrics"></div>
-          <h3>Eventos</h3>
+          <h3>Events</h3>
           <ol id="log"></ol>
         </aside>
       </main>
       <section id="kanban"></section>
       <div id="config" class="drawer" hidden>
         <div class="drawer-head">
-          <h2>Parâmetros</h2>
+          <h2>Settings</h2>
           <button id="configClose" class="btn">✕</button>
         </div>
         <form id="configForm"></form>
-        <p class="hint">Mudar time, ambientes ou seed reinicia a simulação. O resto vale na hora. A URL sempre carrega o setup atual (🔗 Compartilhar copia o link).</p>
-        <button id="resetCfg" class="btn">Restaurar padrão</button>
+        <p class="hint">Changing the team, environments or seed restarts the simulation. Everything else applies immediately. The URL always carries the current setup (🔗 Share copies the link).</p>
+        <button id="resetCfg" class="btn">Reset to defaults</button>
         <p class="credit">Tiles: Kenney.nl (CC0)</p>
       </div>
     </div>

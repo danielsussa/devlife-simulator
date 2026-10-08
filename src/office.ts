@@ -1,4 +1,4 @@
-// Planta do escritório em coordenadas de tile. Posições são floats (0.5 = centro do tile).
+// Office floor plan in tile coordinates. Positions are floats (0.5 = tile center).
 import { F } from './assets';
 
 export const MAP_W = 34;
@@ -15,7 +15,7 @@ export interface Prop {
   frame: number;
   x: number; // tile
   y: number;
-  flat?: boolean; // tapetes: ficam no chão, abaixo de tudo
+  flat?: boolean; // rugs: lie on the floor, below everything
   block?: boolean;
 }
 
@@ -33,7 +33,7 @@ export interface Layout {
   meetingSeats: Pt[];
   meetingCard: (i: number) => Pt;
   idleSpots: Pt[];
-  standupSpots: Pt[]; // em frente ao quadro: daily e onde o dev pega a tarefa
+  standupSpots: Pt[]; // in front of the board: daily standup and where devs pick up tasks
   poStandup: Pt;
   readyCard: (i: number) => Pt;
   readyCapacity: number;
@@ -78,7 +78,7 @@ export function buildLayout(envCount: number, prodCount: number): Layout {
     y: y0 + Math.floor(i / perRow) * dy,
   });
 
-  // Paredes externas (a de cima tem 2 tiles de altura, estilo top-down)
+  // Outer walls (the top one is 2 tiles tall, top-down style)
   for (let x = 0; x < MAP_W; x++) {
     setWall(x, 0);
     setWall(x, 1);
@@ -86,9 +86,9 @@ export function buildLayout(envCount: number, prodCount: number): Layout {
   }
   for (let y = 0; y < MAP_H; y++) {
     setWall(0, y);
-    if (y !== 12 && y !== 13) setWall(MAP_W - 1, y); // porta de entrada à direita
+    if (y !== 12 && y !== 13) setWall(MAP_W - 1, y); // entrance door on the right
   }
-  // Divisórias internas
+  // Inner partitions
   for (let y = 2; y <= 10; y++) if (y !== 6 && y !== 7) setWall(11, y);
   for (let x = 0; x <= 11; x++) if (x !== 5 && x !== 6) setWall(x, 11);
   for (let y = 11; y < MAP_H; y++) if (y !== 13 && y !== 14) setWall(11, y);
@@ -99,19 +99,19 @@ export function buildLayout(envCount: number, prodCount: number): Layout {
   fill(26, 2, 32, 11, 'carpet2');
   fill(12, 16, 32, 22, 'tile');
 
-  // --- Produto / backlog (sala superior esquerda) ---
+  // --- Product / backlog (top-left room) ---
   const board = [
     { x: 1.5, y: 0.15, w: 5.2, h: 1.7, title: 'BACKLOG' },
-    { x: 7.0, y: 0.15, w: 3.5, h: 1.7, title: 'PRONTO P/ DEV' },
+    { x: 7.0, y: 0.15, w: 3.5, h: 1.7, title: 'READY FOR DEV' },
     { x: 26.5, y: 0.15, w: 6, h: 1.7, title: 'PULL REQUESTS' },
   ];
   table(3, 4, 6);
   put(F.officeChair, 3, 5, false);
-  put(F.stove, 1, 9); // canto do café
+  put(F.stove, 1, 9); // coffee corner
   put(F.plant, 10, 10);
-  labels.push({ text: 'PRODUTO', x: 5.5, y: 9.6 });
+  labels.push({ text: 'PRODUCT', x: 5.5, y: 9.6 });
 
-  // --- Sala de refinamento ---
+  // --- Refinement room ---
   fill(2, 14, 9, 20, 'green');
   table(3, 8, 17);
   const meetingSeats: Pt[] = [];
@@ -125,9 +125,9 @@ export function buildLayout(envCount: number, prodCount: number): Layout {
   }
   put(F.plant, 1, 12);
   put(F.plant, 10, 22);
-  labels.push({ text: 'REFINAMENTO', x: 5.5, y: 12.6 });
+  labels.push({ text: 'REFINEMENT', x: 5.5, y: 12.6 });
 
-  // --- Time de dev ---
+  // --- Dev team ---
   const desks: Layout['desks'] = [];
   for (let row = 0; row < 3; row++)
     for (let col = 0; col < 3; col++) {
@@ -138,23 +138,23 @@ export function buildLayout(envCount: number, prodCount: number): Layout {
       desks.push({ seat: { x: dx + 0.5, y: dy - 0.45 }, card: { x: dx + 1.5, y: dy + 0.3 }, monitor: { x: dx + 0.5, y: dy - 0.05 } });
     }
   for (const x of [12, 25]) put(F.plantSmall, x, 2);
-  labels.push({ text: 'TIME DEV', x: 18.5, y: 11.6 });
+  labels.push({ text: 'DEV TEAM', x: 18.5, y: 11.6 });
 
-  // --- Área de code review ---
+  // --- Code review area ---
   table(27, 31, 5);
   table(27, 31, 8);
   labels.push({ text: 'CODE REVIEW', x: 29.5, y: 11.6 });
 
-  // --- Branch main: PRs mergeadas esperando a próxima tag ---
+  // --- main branch: merged PRs waiting for the next tag ---
   table(23, 28, 13);
   labels.push({ text: 'MAIN', x: 26, y: 14.2 });
 
-  // --- Infra: um rack por ambiente + área de produção ---
+  // --- Infra: one rack per environment + production area ---
   const racks: Layout['racks'] = [];
   const span = 15 / Math.max(1, envCount);
   const firstProd = Math.max(0, envCount - Math.max(1, prodCount));
   const rackX = (i: number) => Math.round(13 + i * span + span / 2 - 1);
-  // piso diferente embaixo dos racks de produção
+  // different floor under the production racks
   const prodStart = firstProd === 0 ? 12 : Math.max(12, rackX(firstProd) - 1);
   fill(prodStart, 16, 27, 22, 'prod');
   for (let i = 0; i < envCount; i++) {
@@ -169,12 +169,12 @@ export function buildLayout(envCount: number, prodCount: number): Layout {
     });
   }
   fill(28, 17, 32, 21, 'green');
-  // console de deploy (onde o dev de plantão senta de madrugada)
+  // deploy console (where the on-call dev sits at night)
   table(12, 13, 22);
   put(F.officeChair, 12, 21, false);
-  if (prodStart > 13) labels.push({ text: 'PRÉ-PROD', x: (12 + prodStart) / 2, y: 22.6 });
-  labels.push({ text: 'PRODUÇÃO', x: (prodStart + 28) / 2, y: 22.6 });
-  labels.push({ text: 'ENTREGUE', x: 30, y: 16.6 });
+  if (prodStart > 13) labels.push({ text: 'PRE-PROD', x: (12 + prodStart) / 2, y: 22.6 });
+  labels.push({ text: 'PRODUCTION', x: (prodStart + 28) / 2, y: 22.6 });
+  labels.push({ text: 'DELIVERED', x: 30, y: 16.6 });
 
   return {
     wall,
@@ -211,7 +211,7 @@ export function buildLayout(envCount: number, prodCount: number): Layout {
   };
 }
 
-/** BFS em 4 direções; devolve centros de tile do caminho (sem o ponto de partida). */
+/** 4-way BFS; returns the tile centers along the path (excluding the start point). */
 export function findPath(layout: Layout, from: Pt, to: Pt): Pt[] {
   const sx = Math.floor(from.x), sy = Math.floor(from.y);
   const tx = Math.floor(to.x), ty = Math.floor(to.y);
@@ -240,6 +240,6 @@ export function findPath(layout: Layout, from: Pt, to: Pt): Pt[] {
   const path: Pt[] = [];
   for (let c = goal; c !== start; c = prev[c]) path.push({ x: (c % MAP_W) + 0.5, y: ((c / MAP_W) | 0) + 0.5 });
   path.reverse();
-  path[path.length - 1] = to; // último passo vai exatamente pro ponto alvo
+  path[path.length - 1] = to; // last step goes exactly to the target point
   return path;
 }

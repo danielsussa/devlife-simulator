@@ -7,12 +7,12 @@ const days = (hours: number) => (hours < 24 ? `${hours.toFixed(0)}h` : `${(hours
 const SERIES = ['--s1', '--s2', '--s3', '--s4', '--s5', '--s6', '--s7', '--s8'];
 
 export function renderClock(sim: Sim) {
-  // largura fixa + status sempre presente (só some com visibility): a barra não pula
+  // fixed width + status always present (only hidden via visibility): the bar doesn't jump
   const weekend = Math.floor(sim.t / 24) % 7 >= 5;
   const icon = weekend ? '🏖' : '🌙';
   const el = $('clock');
   el.innerHTML = `${formatClock(sim.t)} <span class="off ${sim.working ? 'hide' : ''}">${icon}</span>`;
-  el.title = sim.working ? 'Em expediente' : weekend ? 'Fim de semana' : 'Fora do expediente';
+  el.title = sim.working ? 'Working hours' : weekend ? 'Weekend' : 'Off hours';
 }
 
 export function renderMetrics(sim: Sim) {
@@ -21,25 +21,25 @@ export function renderMetrics(sim: Sim) {
   const top = m.stages.reduce((a, b) => (b.days > a.days ? b : a), m.stages[0]);
   $('metrics').innerHTML = `
     <div class="tiles">
-      <div class="tile"><div class="v">${m.doneCount ? m.leadDays.toFixed(1) + 'd' : '–'}</div><div class="k">lead time médio (30d)</div></div>
-      <div class="tile"><div class="v">${m.throughputWeek.toFixed(1)}</div><div class="k">entregas / semana</div></div>
-      <div class="tile"><div class="v">${m.wip}</div><div class="k">WIP (em andamento)</div></div>
-      <div class="tile"><div class="v">${m.doneCount ? Math.round(m.flowEfficiency * 100) + '%' : '–'}</div><div class="k">eficiência de fluxo</div></div>
-      <div class="tile"><div class="v">${Math.round(m.devTime.idle * 100)}%</div><div class="k">devs ociosos (expediente)</div></div>
-      <div class="tile"><div class="v">${Math.round(m.devTime.meetings * 100)}%</div><div class="k">em daily + refinamento</div></div>
-      <div class="tile"><div class="v">${Math.round(m.devTime.reworkOfCoding * 100)}%</div><div class="k">do código é refatoração</div></div>
-      <div class="tile"><div class="v">${m.commentsPerPR.toFixed(1)}</div><div class="k">apontamentos por entrega</div></div>
-      <div class="tile"><div class="v">${m.prsPerTag ? m.prsPerTag.toFixed(1) : '–'}</div><div class="k">PRs por tag (30d)</div></div>
-      <div class="tile"><div class="v">${m.conflictsPerPR.toFixed(1)}</div><div class="k">conflitos de merge por entrega</div></div>
-      <div class="tile"><div class="v">${m.mergeQueue}</div><div class="k">PRs aprovadas esperando vaga na main</div></div>
-      <div class="tile ${m.openBugs ? 'alarm' : ''}"><div class="v">${m.openBugs ? '🐞 ' + m.openBugs : m.bugs}</div><div class="k">${m.openBugs ? 'bugs abertos agora!' : 'bugs em produção (30d)'}</div></div>
-      <div class="tile"><div class="v">${m.mttrHours ? days(m.mttrHours) : '–'}</div><div class="k">tempo médio p/ corrigir bug</div></div>
-      <div class="tile"><div class="v">${Math.round(m.devTime.bugfix * 100)}%</div><div class="k">do time apagando incêndio</div></div>
-      <div class="tile"><div class="v">${m.nightHoursWeek.toFixed(1)}h</div><div class="k">de madrugada / semana</div></div>
-      <div class="tile"><div class="v">${sim.deploySession ? '🌙 ' + sim.devs[sim.deploySession.devId].name : '–'}</div><div class="k">de plantão agora</div></div>
+      <div class="tile"><div class="v">${m.doneCount ? m.leadDays.toFixed(1) + 'd' : '–'}</div><div class="k">avg lead time (30d)</div></div>
+      <div class="tile"><div class="v">${m.throughputWeek.toFixed(1)}</div><div class="k">deliveries / week</div></div>
+      <div class="tile"><div class="v">${m.wip}</div><div class="k">WIP (in progress)</div></div>
+      <div class="tile"><div class="v">${m.doneCount ? Math.round(m.flowEfficiency * 100) + '%' : '–'}</div><div class="k">flow efficiency</div></div>
+      <div class="tile"><div class="v">${Math.round(m.devTime.idle * 100)}%</div><div class="k">devs idle (working hours)</div></div>
+      <div class="tile"><div class="v">${Math.round(m.devTime.meetings * 100)}%</div><div class="k">in daily + refinement</div></div>
+      <div class="tile"><div class="v">${Math.round(m.devTime.reworkOfCoding * 100)}%</div><div class="k">of coding is refactoring</div></div>
+      <div class="tile"><div class="v">${m.commentsPerPR.toFixed(1)}</div><div class="k">review comments per delivery</div></div>
+      <div class="tile"><div class="v">${m.prsPerTag ? m.prsPerTag.toFixed(1) : '–'}</div><div class="k">PRs per tag (30d)</div></div>
+      <div class="tile"><div class="v">${m.conflictsPerPR.toFixed(1)}</div><div class="k">merge conflicts per delivery</div></div>
+      <div class="tile"><div class="v">${m.mergeQueue}</div><div class="k">approved PRs waiting for a main slot</div></div>
+      <div class="tile ${m.openBugs ? 'alarm' : ''}"><div class="v">${m.openBugs ? '🐞 ' + m.openBugs : m.bugs}</div><div class="k">${m.openBugs ? 'open bugs right now!' : 'production bugs (30d)'}</div></div>
+      <div class="tile"><div class="v">${m.mttrHours ? days(m.mttrHours) : '–'}</div><div class="k">avg time to fix a bug</div></div>
+      <div class="tile"><div class="v">${Math.round(m.devTime.bugfix * 100)}%</div><div class="k">of the team firefighting</div></div>
+      <div class="tile"><div class="v">${m.nightHoursWeek.toFixed(1)}h</div><div class="k">late-night / week</div></div>
+      <div class="tile"><div class="v">${sim.deploySession ? '🌙 ' + sim.devs[sim.deploySession.devId].name : '–'}</div><div class="k">on call now</div></div>
     </div>
     <div class="breakdown">
-      <div class="title"><span>Onde a demanda passa o tempo</span><span>${m.doneCount} entregues</span></div>
+      <div class="title"><span>Where work spends its time</span><span>${m.doneCount} delivered</span></div>
       ${
         m.doneCount
           ? `<div class="bar">${m.stages
@@ -51,7 +51,7 @@ export function renderMetrics(sim: Sim) {
                    `<li class="${s === top ? 'top' : ''}"><i style="background:var(${SERIES[i % SERIES.length]})"></i>${s.label}<b>${s.days.toFixed(1)}d</b></li>`,
                )
                .join('')}</ul>`
-          : '<div class="more">Nenhuma entrega em produção ainda…</div>'
+          : '<div class="more">No deliveries in production yet…</div>'
       }
     </div>`;
 }
@@ -89,26 +89,26 @@ function card(sim: Sim, tk: Ticket): string {
       meta = [need('dev') ? `dev ${ok('dev')}/${need('dev')}` : '', need('techlead') ? `TL ${ok('techlead')}/${need('techlead')}` : '']
         .filter(Boolean)
         .join(' · ');
-      if (tk.reviewRounds > 1) meta += ` · rodada ${tk.reviewRounds}`;
-      if (tk.awaitingMerge) meta = `✔ aprovada · 🔒 main cheia (${sim.inMain().length}/${sim.cfg.maxMainPRs})`;
+      if (tk.reviewRounds > 1) meta += ` · round ${tk.reviewRounds}`;
+      if (tk.awaitingMerge) meta = `✔ approved · 🔒 main full (${sim.inMain().length}/${sim.cfg.maxMainPRs})`;
       extra = `<div class="m"><span>${names}</span></div>`;
       break;
     }
     case 'deploy': {
       if (tk.tagId == null && tk.hotfixEnds == null) {
-        meta = '🏷 aguarda próxima tag';
+        meta = '🏷 waiting for next tag';
         break;
       }
       const env = sim.envs[tk.envIndex];
       if (tk.hotfixEnds != null) {
-        meta = `🚑 hotfix · faltam ${days(Math.max(0, tk.hotfixEnds - sim.t))}`;
+        meta = `🚑 hotfix · ${days(Math.max(0, tk.hotfixEnds - sim.t))} left`;
       } else if (tk.deploying) {
         const p = (sim.t - env.startedAt) / (env.endsAt - env.startedAt);
-        meta = `canary ${Math.round(p * 100)}% · faltam ${days(env.endsAt - sim.t)}`;
+        meta = `canary ${Math.round(p * 100)}% · ${days(env.endsAt - sim.t)} left`;
         extra = `<div class="prog canary"><div style="width:${p * 100}%"></div></div>`;
       } else {
-        const dayRange = sim.cfg.deployOnFriday ? 'seg–sex' : 'seg–qui';
-        meta = sim.cfg.deployAtNight ? `🌙 aguarda janela ${sim.cfg.deployHour}h (${dayRange})` : `⏳ na fila (${dayRange})`;
+        const dayRange = sim.cfg.deployOnFriday ? 'Mon–Fri' : 'Mon–Thu';
+        meta = sim.cfg.deployAtNight ? `🌙 waiting for ${sim.cfg.deployHour}h window (${dayRange})` : `⏳ queued (${dayRange})`;
       }
       break;
     }
@@ -119,10 +119,10 @@ function card(sim: Sim, tk: Ticket): string {
       meta = dev ?? '';
   }
   const badges = [
-    tk.kind === 'bug' ? '<span class="badge bug">🐞 prioridade máxima</span>' : '',
-    tk.rework ? '<span class="badge">🔧 refatorando</span>' : '',
+    tk.kind === 'bug' ? '<span class="badge bug">🐞 top priority</span>' : '',
+    tk.rework ? '<span class="badge">🔧 refactoring</span>' : '',
     tk.comments ? `<span class="badge">💬 ${tk.comments}</span>` : '',
-    tk.conflicts ? `<span class="badge">⚔ ${tk.conflicts} conflito${tk.conflicts > 1 ? 's' : ''}</span>` : '', tk.rollbacks ? `<span class="badge">⚠ ${tk.rollbacks} rollback</span>` : '']
+    tk.conflicts ? `<span class="badge">⚔ ${tk.conflicts} conflict${tk.conflicts > 1 ? 's' : ''}</span>` : '', tk.rollbacks ? `<span class="badge">⚠ ${tk.rollbacks} rollback</span>` : '']
     .filter(Boolean)
     .join(' ');
   return `<div class="kcard ${tk.kind === 'bug' ? 'bug' : ''}" data-id="${tk.id}" style="border-color:${hex(tk.color)}">
@@ -140,20 +140,20 @@ function tagCard(sim: Sim, tag: Tag): string {
   let extra = '';
   if (tag.hotfix) {
     const tk = prs[0];
-    meta = `🚑 hotfix · faltam ${days(Math.max(0, (tk.hotfixEnds ?? sim.t) - sim.t))}`;
+    meta = `🚑 hotfix · ${days(Math.max(0, (tk.hotfixEnds ?? sim.t) - sim.t))} left`;
   } else if (tag.deploying) {
     const p = (sim.t - env.startedAt) / (env.endsAt - env.startedAt);
-    meta = `canary ${Math.round(p * 100)}% · faltam ${days(env.endsAt - sim.t)}`;
+    meta = `canary ${Math.round(p * 100)}% · ${days(env.endsAt - sim.t)} left`;
     extra = `<div class="prog canary"><div style="width:${p * 100}%"></div></div>`;
   } else {
-    const dayRange = sim.cfg.deployOnFriday ? 'seg–sex' : 'seg–qui';
-    meta = sim.cfg.deployAtNight ? `🌙 aguarda janela ${sim.cfg.deployHour}h (${dayRange})` : `⏳ na fila (${dayRange})`;
+    const dayRange = sim.cfg.deployOnFriday ? 'Mon–Fri' : 'Mon–Thu';
+    meta = sim.cfg.deployAtNight ? `🌙 waiting for ${sim.cfg.deployHour}h window (${dayRange})` : `⏳ queued (${dayRange})`;
   }
   const chips = prs
     .map((tk) => `<span class="pr" data-id="${tk.id}" style="border-color:${hex(tk.color)}">#${tk.id}</span>`)
     .join('');
   return `<div class="kcard tag ${hasBug ? 'bug' : ''}">
-    <div class="t"><b>🏷 ${esc(tag.name)}</b>${prs.length} PR${prs.length > 1 ? 's' : ''}${tag.includes.length ? ` · inclui ${esc(tag.includes.join(', '))}` : ''}</div>
+    <div class="t"><b>🏷 ${esc(tag.name)}</b>${prs.length} PR${prs.length > 1 ? 's' : ''}${tag.includes.length ? ` · includes ${esc(tag.includes.join(', '))}` : ''}</div>
     <div class="m"><span>${meta}</span><span>${days(sim.t - tag.createdAt)}</span></div>
     <div class="prs">${chips}</div>${extra}
   </div>`;
@@ -166,9 +166,9 @@ export function renderKanban(sim: Sim) {
   }));
   const cols: { title: string; items: Ticket[]; tags?: Tag[]; count?: string }[] = [
     { title: 'Backlog', items: sim.inStage('backlog') },
-    { title: 'Refinamento', items: sim.inStage('refining') },
-    { title: 'Pronto p/ dev', items: sim.inStage('ready') },
-    { title: 'Em dev', items: sim.inStage('doing') },
+    { title: 'Refinement', items: sim.inStage('refining') },
+    { title: 'Ready for dev', items: sim.inStage('ready') },
+    { title: 'In dev', items: sim.inStage('doing') },
     { title: 'Code review', items: sim.inStage('review') },
     {
       title: 'Main',
@@ -177,13 +177,13 @@ export function renderKanban(sim: Sim) {
     },
     ...tagCols.map((c) => ({ title: c.title, items: [], tags: c.tags })),
     {
-      title: 'Entregue',
+      title: 'Delivered',
       items: sim.inStage('done').sort((a, b) => b.doneAt! - a.doneAt!),
     },
   ];
   const LIMIT = 25;
   const bugFirst = (a: Ticket, b: Ticket) => (a.kind === 'bug' ? 0 : 1) - (b.kind === 'bug' ? 0 : 1);
-  for (const c of cols) if (c.title !== 'Entregue') c.items.sort(bugFirst);
+  for (const c of cols) if (c.title !== 'Delivered') c.items.sort(bugFirst);
   $('kanban').innerHTML = cols
     .map(
       (c) => `<div class="col"><h4>${c.title}<span>${c.tags ? `${c.tags.length} tag${c.tags.length === 1 ? '' : 's'}` : c.count ?? c.items.length}</span></h4><div class="cards">
@@ -195,80 +195,80 @@ export function renderKanban(sim: Sim) {
     .join('');
 }
 
-// ---- formulário de parâmetros -------------------------------------------------
+// ---- settings form -------------------------------------------------
 
 type Field = { key: keyof Config; label: string; min?: number; max?: number; step?: number; restart?: boolean };
 const GROUPS: { title: string; fields: Field[] }[] = [
   {
-    title: 'Time e demanda',
+    title: 'Team and demand',
     fields: [
-      { key: 'devs', label: 'Devs no time', min: 1, max: 8, step: 1, restart: true },
+      { key: 'devs', label: 'Devs on the team', min: 1, max: 8, step: 1, restart: true },
       { key: 'techLeads', label: 'Tech leads', min: 0, max: 2, step: 1, restart: true },
-      { key: 'arrivalEveryDays', label: 'Nova demanda a cada (dias)', min: 0.1, max: 30, step: 0.1 },
-      { key: 'dailyHour', label: 'Horário da daily', min: 9, max: 17, step: 0.5 },
-      { key: 'dailyHours', label: 'Duração da daily (h)', min: 0, max: 4, step: 0.25 },
-      { key: 'pickOnlyAtDaily', label: 'Tarefa nova só é puxada na daily' },
-      { key: 'refineHours', label: 'Duração do refinamento (h)', min: 0.5, max: 8, step: 0.5 },
-      { key: 'refineBatch', label: 'Demandas por refinamento', min: 1, max: 10, step: 1 },
+      { key: 'arrivalEveryDays', label: 'New demand every (days)', min: 0.1, max: 30, step: 0.1 },
+      { key: 'dailyHour', label: 'Daily start time', min: 9, max: 17, step: 0.5 },
+      { key: 'dailyHours', label: 'Daily duration (h)', min: 0, max: 4, step: 0.25 },
+      { key: 'pickOnlyAtDaily', label: 'New tasks only pulled at the daily' },
+      { key: 'refineHours', label: 'Refinement duration (h)', min: 0.5, max: 8, step: 0.5 },
+      { key: 'refineBatch', label: 'Items per refinement', min: 1, max: 10, step: 1 },
     ],
   },
   {
-    title: 'Desenvolvimento (dias úteis)',
+    title: 'Development (working days)',
     fields: [
-      { key: 'devDaysMin', label: 'Mínimo', min: 0.25, max: 30, step: 0.25 },
-      { key: 'devDaysMax', label: 'Máximo', min: 0.25, max: 30, step: 0.25 },
+      { key: 'devDaysMin', label: 'Minimum', min: 0.25, max: 30, step: 0.25 },
+      { key: 'devDaysMax', label: 'Maximum', min: 0.25, max: 30, step: 0.25 },
     ],
   },
   {
     title: 'Code review',
     fields: [
-      { key: 'devApprovals', label: 'Aprovações de dev por PR', min: 0, max: 7, step: 1 },
-      { key: 'techLeadApprovals', label: 'Aprovações de tech lead por PR', min: 0, max: 2, step: 1 },
-      { key: 'reviewWaitDaysMin', label: 'Dev demora p/ pegar, mín (dias)', min: 0, max: 10, step: 0.1 },
-      { key: 'reviewWaitDaysMax', label: 'Dev demora p/ pegar, máx (dias)', min: 0, max: 10, step: 0.1 },
-      { key: 'tlReviewWaitDaysMin', label: 'TL demora p/ pegar, mín (dias)', min: 0, max: 10, step: 0.1 },
-      { key: 'tlReviewWaitDaysMax', label: 'TL demora p/ pegar, máx (dias)', min: 0, max: 10, step: 0.1 },
-      { key: 'reviewEffortHours', label: 'Tempo revisando (h)', min: 0.25, max: 8, step: 0.25 },
-      { key: 'changesRequestedPct', label: '% de revisões com apontamento', min: 0, max: 100, step: 1 },
-      { key: 'refactorPctMin', label: 'Refatoração mín (% do esforço)', min: 0, max: 200, step: 5 },
-      { key: 'refactorPctMax', label: 'Refatoração máx (% do esforço)', min: 0, max: 200, step: 5 },
+      { key: 'devApprovals', label: 'Dev approvals per PR', min: 0, max: 7, step: 1 },
+      { key: 'techLeadApprovals', label: 'Tech lead approvals per PR', min: 0, max: 2, step: 1 },
+      { key: 'reviewWaitDaysMin', label: 'Dev pickup delay, min (days)', min: 0, max: 10, step: 0.1 },
+      { key: 'reviewWaitDaysMax', label: 'Dev pickup delay, max (days)', min: 0, max: 10, step: 0.1 },
+      { key: 'tlReviewWaitDaysMin', label: 'TL pickup delay, min (days)', min: 0, max: 10, step: 0.1 },
+      { key: 'tlReviewWaitDaysMax', label: 'TL pickup delay, max (days)', min: 0, max: 10, step: 0.1 },
+      { key: 'reviewEffortHours', label: 'Review effort (h)', min: 0.25, max: 8, step: 0.25 },
+      { key: 'changesRequestedPct', label: '% of reviews with comments', min: 0, max: 100, step: 1 },
+      { key: 'refactorPctMin', label: 'Refactor min (% of effort)', min: 0, max: 200, step: 5 },
+      { key: 'refactorPctMax', label: 'Refactor max (% of effort)', min: 0, max: 200, step: 5 },
     ],
   },
   {
-    title: 'Main e merge',
+    title: 'Main and merge',
     fields: [
-      { key: 'maxMainPRs', label: 'Máx. de PRs na main antes do deploy (0 = sem limite)', min: 0, max: 50, step: 1 },
-      { key: 'conflictPct', label: '% de conflito por PR aberta a cada merge', min: 0, max: 100, step: 1 },
-      { key: 'conflictHoursMin', label: 'Resolver conflito, mín (h)', min: 0.25, max: 40, step: 0.25 },
-      { key: 'conflictHoursMax', label: 'Resolver conflito, máx (h)', min: 0.25, max: 40, step: 0.25 },
+      { key: 'maxMainPRs', label: 'Max PRs on main before deploy (0 = no limit)', min: 0, max: 50, step: 1 },
+      { key: 'conflictPct', label: '% conflict per open PR on each merge', min: 0, max: 100, step: 1 },
+      { key: 'conflictHoursMin', label: 'Resolve conflict, min (h)', min: 0.25, max: 40, step: 0.25 },
+      { key: 'conflictHoursMax', label: 'Resolve conflict, max (h)', min: 0.25, max: 40, step: 0.25 },
     ],
   },
   {
     title: 'Deploy',
     fields: [
-      { key: 'envs', label: 'Ambientes em ordem (separados por vírgula)', restart: true },
-      { key: 'prodEnvCount', label: 'Quantos dos últimos são produção', min: 1, max: 6, step: 1, restart: true },
-      { key: 'envsPerDay', label: 'Ambientes que recebem deploy por dia', min: 1, max: 6, step: 1 },
-      { key: 'canaryHoursMin', label: 'Canary mínimo (h)', min: 0.5, max: 24, step: 0.5 },
-      { key: 'canaryHoursMax', label: 'Canary máximo (h, até 24)', min: 0.5, max: 24, step: 0.5 },
-      { key: 'canaryFailPct', label: '% canary falha', min: 0, max: 100, step: 1 },
-      { key: 'deployAtNight', label: 'Deploy só na janela noturna (1 dev de plantão)' },
-      { key: 'deployHour', label: 'Início da janela (h)', min: 18, max: 23.5, step: 0.5 },
-      { key: 'deployHoursMin', label: 'Dev fica de madrugada, mín (h)', min: 0.5, max: 8, step: 0.5 },
-      { key: 'deployHoursMax', label: 'Dev fica de madrugada, máx (h)', min: 0.5, max: 8, step: 0.5 },
-      { key: 'deployOnFriday', label: 'Permite deploy na sexta (padrão: seg–qui)' },
+      { key: 'envs', label: 'Environments in order (comma-separated)', restart: true },
+      { key: 'prodEnvCount', label: 'How many of the last are production', min: 1, max: 6, step: 1, restart: true },
+      { key: 'envsPerDay', label: 'Environments deployed per day', min: 1, max: 6, step: 1 },
+      { key: 'canaryHoursMin', label: 'Canary min (h)', min: 0.5, max: 24, step: 0.5 },
+      { key: 'canaryHoursMax', label: 'Canary max (h, up to 24)', min: 0.5, max: 24, step: 0.5 },
+      { key: 'canaryFailPct', label: '% canary failure', min: 0, max: 100, step: 1 },
+      { key: 'deployAtNight', label: 'Deploy only in night window (1 dev on call)' },
+      { key: 'deployHour', label: 'Window start (h)', min: 18, max: 23.5, step: 0.5 },
+      { key: 'deployHoursMin', label: 'Dev stays late, min (h)', min: 0.5, max: 8, step: 0.5 },
+      { key: 'deployHoursMax', label: 'Dev stays late, max (h)', min: 0.5, max: 8, step: 0.5 },
+      { key: 'deployOnFriday', label: 'Allow Friday deploys (default: Mon–Thu)' },
     ],
   },
   {
-    title: 'Bugs em produção',
+    title: 'Production bugs',
     fields: [
-      { key: 'bugPct', label: '% das entregas que dão bug', min: 0, max: 100, step: 1 },
-      { key: 'bugMaxDaysAfter', label: 'Bug aparece até N dias após deploy', min: 0, max: 30, step: 0.5 },
-      { key: 'bugSwarmDevs', label: 'Devs que param pra ajudar', min: 1, max: 8, step: 1 },
-      { key: 'bugFixHoursMin', label: 'Esforço do fix, mín (horas-dev)', min: 0.5, max: 80, step: 0.5 },
-      { key: 'bugFixHoursMax', label: 'Esforço do fix, máx (horas-dev)', min: 0.5, max: 80, step: 0.5 },
-      { key: 'hotfixHours', label: 'Hotfix subindo em produção (h)', min: 0.25, max: 24, step: 0.25 },
-      { key: 'seed', label: 'Seed aleatória', min: 1, max: 999999, step: 1, restart: true },
+      { key: 'bugPct', label: '% of deliveries with a bug', min: 0, max: 100, step: 1 },
+      { key: 'bugMaxDaysAfter', label: 'Bug appears up to N days after deploy', min: 0, max: 30, step: 0.5 },
+      { key: 'bugSwarmDevs', label: 'Devs who drop everything to help', min: 1, max: 8, step: 1 },
+      { key: 'bugFixHoursMin', label: 'Fix effort, min (dev-hours)', min: 0.5, max: 80, step: 0.5 },
+      { key: 'bugFixHoursMax', label: 'Fix effort, max (dev-hours)', min: 0.5, max: 80, step: 0.5 },
+      { key: 'hotfixHours', label: 'Hotfix rollout to production (h)', min: 0.25, max: 24, step: 0.25 },
+      { key: 'seed', label: 'Random seed', min: 1, max: 999999, step: 1, restart: true },
     ],
   },
 ];

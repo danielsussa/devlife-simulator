@@ -6,7 +6,7 @@ import { loadConfigFromUrl, shareUrl, syncUrl } from './share';
 import { buildConfigForm, renderClock, renderKanban, renderLog, renderMetrics } from './ui';
 
 const cfg = structuredClone(defaultConfig);
-loadConfigFromUrl(cfg); // setup compartilhado via ?cfg=
+loadConfigFromUrl(cfg); // setup shared via ?cfg=
 syncUrl(cfg);
 let sim = new Sim(cfg);
 
@@ -25,7 +25,7 @@ const fastNights = document.getElementById('fastNights') as HTMLInputElement;
 
 const hoursPerSecond = () => {
   const h = SPEEDS[speed].h;
-  // acelera a noite, menos durante a janela de deploy (dá pra ver o plantão)
+  // fast-forward nights, except during the deploy window (so you can watch the on-call dev)
   return fastNights.checked && !sim.working && !sim.deploySession ? Math.max(h, Math.min(h * 6, 24)) : h;
 };
 
@@ -91,19 +91,19 @@ shareBtn.addEventListener('click', async () => {
   const url = shareUrl(cfg);
   try {
     await navigator.clipboard.writeText(url);
-    shareBtn.textContent = '✓ Link copiado';
+    shareBtn.textContent = '✓ Link copied';
   } catch {
-    prompt('Copie o link do setup:', url);
+    prompt('Copy the setup link:', url);
   }
-  setTimeout(() => (shareBtn.textContent = '🔗 Compartilhar'), 1800);
+  setTimeout(() => (shareBtn.textContent = '🔗 Share'), 1800);
 });
 document.getElementById('resetCfg')!.addEventListener('click', () => {
-  location.href = location.pathname; // sem ?cfg= volta ao padrão
+  location.href = location.pathname; // no ?cfg= means defaults
 });
 
-// ---- kanban hover destaca a ticket no escritório ----
+// ---- kanban hover highlights the ticket in the office ----
 const kanban = document.getElementById('kanban')!;
-// o kanban é redesenhado a cada 250ms: relê o card sob o mouse em vez de confiar em mouseover
+// the kanban re-renders every 250ms: re-read the card under the mouse instead of relying on mouseover
 let mouse: { x: number; y: number } | null = null;
 const pickHighlight = () => {
   const el = mouse && document.elementFromPoint(mouse.x, mouse.y);
@@ -133,5 +133,5 @@ function renderAll() {
 setInterval(renderAll, 250);
 renderAll();
 
-// debug no console: devlife.sim, devlife.scene
+// console debugging: devlife.sim, devlife.scene
 (window as unknown as Record<string, unknown>).devlife = { get sim() { return sim; }, scene };

@@ -1,5 +1,5 @@
-// Único lugar que conhece os tilesets. Pra trocar pelo LimeZu (ou outro pack),
-// mude os arquivos, o tamanho do tile e os índices de frame abaixo.
+// The only place that knows about the tilesets. To switch to LimeZu (or another pack),
+// change the files, the tile size and the frame indices below.
 
 export const TILE = 16;
 
@@ -8,7 +8,7 @@ export const SHEETS = {
   chars: { key: 'chars', url: 'assets/kenney/chars.png', spacing: 1 },
 } as const;
 
-// Kenney "Roguelike Indoors" (27 colunas)
+// Kenney "Roguelike Indoors" (27 columns)
 export const F = {
   tableL: 0,
   tableM: 1,
@@ -23,10 +23,10 @@ export const F = {
   bookshelfR: 480,
   server: 471,
   serverAlt: 472,
-  stove: 392, // máquina de café :)
+  stove: 392, // coffee machine :)
 };
 
-// Kenney "Roguelike Characters" (54 colunas): personagens já montados
+// Kenney "Roguelike Characters" (54 columns): pre-assembled characters
 export const DEV_SPRITES = [270, 324, 325, 378, 379, 432, 433, 486, 540];
 export const PO_SPRITE = 271;
 export const TL_SPRITES = [541, 487];

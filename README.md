@@ -1,29 +1,30 @@
 # DevLife Simulator
 
-Simulador visual (top-down, estilo Gather) do fluxo de entrega de um time de software:
-demanda chegando no backlog, refinamento, daily, desenvolvimento, code review (dev + tech lead),
-apontamentos e refatoração, merge, deploy noturno com plantão e compensação de horário,
-canary por ambiente (dev → staging → P1 → P2 → P3, 1 ambiente por dia) e bugs em produção
-com mutirão, review prioritário e hotfix.
+A visual (top-down, Gather-style) simulator of a software team's delivery flow:
+demand arriving in the backlog, refinement, daily standup, development, code review (dev + tech lead),
+review comments and refactoring, merge queue with a limit on PRs in main and merge conflicts,
+release tags (1+ PRs) deployed at night by an on-call dev with time compensation, canary per
+production environment (P1 → P2 → P3, 1 environment per day, Monday to Thursday) and production bugs
+with a swarm, priority review and hotfix.
 
-Tudo é parametrizável (⚙ Parâmetros) e as métricas mostram lead time, throughput, gargalo,
-eficiência de fluxo, ociosidade, retrabalho, horas de madrugada e tempo de correção de bugs.
+Everything is configurable (⚙ Parameters) and the metrics show lead time, throughput, bottleneck,
+flow efficiency, idle time, rework, night hours and bug fix time.
 
-## Rodando
+## Running
 
 ```bash
 npm install
 npm run dev
 ```
 
-## Estrutura
+## Structure
 
-- `src/sim.ts`: motor da simulação (TypeScript puro, sem dependência de renderização)
-- `src/office.ts`: planta do escritório e pathfinding
-- `src/scene.ts`: cena Phaser (personagens, cards, canary, noite, alarmes)
-- `src/ui.ts`: kanban, métricas, log e formulário de parâmetros
-- `src/assets.ts`: único lugar que conhece os tilesets (troque aqui pra usar outro pack)
+- `src/sim.ts`: simulation engine (plain TypeScript, no rendering dependency)
+- `src/office.ts`: office floor plan and pathfinding
+- `src/scene.ts`: Phaser scene (characters, cards, canary, night, alarms)
+- `src/ui.ts`: kanban, metrics, log and parameters form
+- `src/assets.ts`: the only place that knows the tilesets (change it here to use another pack)
 
-## Créditos
+## Credits
 
-Tiles e personagens: [Kenney](https://kenney.nl) (CC0).
+Tiles and characters: [Kenney](https://kenney.nl) (CC0).

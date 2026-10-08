@@ -60,7 +60,7 @@ main { display: grid; grid-template-columns: minmax(0, 1fr) 360px; min-height: 0
 .legend li i { width: 10px; height: 10px; border-radius: 2px; }
 .legend li b { color: var(--text); font-weight: 600; font-variant-numeric: tabular-nums; }
 .legend li { white-space: nowrap; }
-.legend li.top b::after { content: ' ◀ gargalo'; color: var(--warn); font-weight: 500; font-size: 11px; }
+.legend li.top b::after { content: ' ◀ bottleneck'; color: var(--warn); font-weight: 500; font-size: 11px; }
 
 #log { list-style: none; margin: 0; padding: 0; font-size: 12px; overflow-y: auto; flex: 1; min-height: 80px; }
 #log li { padding: 3px 0 3px 8px; border-left: 2px solid var(--line); margin-bottom: 2px; color: var(--text-2); }

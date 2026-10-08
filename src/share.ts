@@ -1,4 +1,4 @@
-// Compartilhar o setup via URL: ?cfg=<base64url do JSON com o que difere do padrão>
+// Share the setup via URL: ?cfg=<base64url of a JSON with what differs from the defaults>
 import { Config, defaultConfig } from './sim';
 
 const PARAM = 'cfg';
@@ -15,7 +15,7 @@ function fromBase64Url(b64: string) {
   return new TextDecoder().decode(Uint8Array.from(bin, (c) => c.charCodeAt(0)));
 }
 
-/** Só o que mudou em relação ao padrão, pra URL ficar curta. */
+/** Only what differs from the defaults, to keep the URL short. */
 function diff(cfg: Config): Partial<Config> {
   const out: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(cfg)) {
@@ -25,7 +25,7 @@ function diff(cfg: Config): Partial<Config> {
   return out as Partial<Config>;
 }
 
-/** Aplica no cfg os parâmetros da URL (ignora chaves desconhecidas ou de tipo errado). */
+/** Applies the URL settings to cfg (ignores unknown keys or wrong types). */
 export function loadConfigFromUrl(cfg: Config): boolean {
   const raw = new URLSearchParams(location.search).get(PARAM);
   if (!raw) return false;
@@ -41,12 +41,12 @@ export function loadConfigFromUrl(cfg: Config): boolean {
     }
     return true;
   } catch {
-    console.warn('Parâmetro ?cfg= inválido, usando o padrão');
+    console.warn('Invalid ?cfg= parameter, using defaults');
     return false;
   }
 }
 
-/** Mantém a URL da barra de endereço sempre refletindo o setup atual. */
+/** Keeps the address bar URL always reflecting the current setup. */
 export function syncUrl(cfg: Config) {
   const url = new URL(location.href);
   const d = diff(cfg);

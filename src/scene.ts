@@ -29,8 +29,8 @@ interface Card {
   pos: Pt;
   dots: Phaser.GameObjects.Graphics;
   stage: string;
-  picked: boolean; // em 'doing': o dev já foi até o quadro buscar o card
-  carrying: boolean; // entre o quadro e a mesa: o card vai na mão do dev
+  picked: boolean; // in 'doing': the dev already went to the board to fetch the card
+  carrying: boolean; // between the board and the desk: the card is in the dev's hand
 }
 
 export interface SceneHooks {
@@ -70,7 +70,7 @@ export class OfficeScene extends Phaser.Scene {
     this.scale.on('resize', () => this.fitCamera());
   }
 
-  /** Recria o mundo inteiro (chamado no reset da simulação). */
+  /** Rebuilds the whole world (called when the simulation resets). */
   rebuild() {
     this.children.removeAll(true);
     this.cards.clear();
@@ -101,7 +101,7 @@ export class OfficeScene extends Phaser.Scene {
     this.po = this.makeWalker(PO_SPRITE, this.layout.poSeat);
 
     this.night = this.add.rectangle(0, 0, MAP_W * TILE, MAP_H * TILE, 0x0b1030, 0).setOrigin(0).setDepth(30000);
-    // luz da mesa do plantão de deploy
+    // desk lamp for the on-call deployer
     const c = this.layout.deployConsole.seat;
     this.lamp = this.add.graphics().setDepth(30001).setBlendMode(Phaser.BlendModes.ADD).setVisible(false);
     for (let r = 44; r > 0; r -= 4) this.lamp.fillStyle(0xffd27a, 0.025).fillCircle(c.x * TILE, c.y * TILE, r);
@@ -111,8 +111,8 @@ export class OfficeScene extends Phaser.Scene {
 
   onSimEvent(e: SimEvent) {
     if (e.devId == null) return;
-    if (e.kind === 'review-ok') this.flashes.set(e.devId, { text: `✅ aprovei #${e.ticketId}`, until: this.time.now + 1800 });
-    if (e.kind === 'review-changes') this.flashes.set(e.devId, { text: `✋ ajustes #${e.ticketId}`, until: this.time.now + 1800 });
+    if (e.kind === 'review-ok') this.flashes.set(e.devId, { text: `✅ approved #${e.ticketId}`, until: this.time.now + 1800 });
+    if (e.kind === 'review-changes') this.flashes.set(e.devId, { text: `✋ changes #${e.ticketId}`, until: this.time.now + 1800 });
   }
 
   update(_: number, deltaMs: number) {
@@ -120,7 +120,7 @@ export class OfficeScene extends Phaser.Scene {
     const dt = Math.min(deltaMs / 1000, 0.1);
     this.hooks.tick(dt);
     const sim = this.hooks.sim();
-    // ~20 tiles por hora simulada: atravessar o escritório leva ~1.5h no relógio da sim
+    // ~20 tiles per simulated hour: crossing the office takes ~1.5h on the sim clock
     const walkSpeed = Math.max(6, this.hooks.hoursPerSecond() * 20); // tiles/s
 
     this.updatePeople(sim, dt, walkSpeed);
@@ -129,7 +129,7 @@ export class OfficeScene extends Phaser.Scene {
     this.updateNight(sim);
   }
 
-  // ---- pessoas ------------------------------------------------------------
+  // ---- people ---------------------------------------------------------------
 
   private updatePeople(sim: Sim, dt: number, speed: number) {
     const L = this.layout;
@@ -140,18 +140,18 @@ export class OfficeScene extends Phaser.Scene {
       let goal: Pt;
       let text = '';
       const standup = L.standupSpots[i % L.standupSpots.length];
-      // Tarefa recém-puxada: o card ainda está no quadro, o dev vai buscar.
+      // Freshly pulled task: the card is still on the board, the dev goes to fetch it.
       const own = sim.ticket(dev.ticketId);
       const ownCard = own && this.cards.get(own.id);
       const mustFetch = !!ownCard && !ownCard.picked && act === 'coding';
-      // ponto em frente ao quadro, embaixo do card (depois da daily cada um vai buscar o seu)
+      // spot in front of the board, under the card (after the daily everyone fetches their own)
       const fetchSpot = ownCard ? { x: Phaser.Math.Clamp(ownCard.pos.x, 1.6, 10.4), y: 2.55 } : standup;
       switch (act) {
         case 'away':
           goal = L.outside;
           break;
         case 'bugfix': {
-          // mutirão em volta da mesa de quem lidera o fix
+          // swarm around the desk of whoever leads the fix
           const bug = sim.ticket(dev.bugId)!;
           const k = Math.max(0, bug.swarm.indexOf(dev.id));
           const lead = L.desks[(bug.devId ?? i) % L.desks.length].seat;
@@ -173,7 +173,7 @@ export class OfficeScene extends Phaser.Scene {
         case 'meeting': {
           const k = sim.meeting?.devIds.indexOf(dev.id) ?? 0;
           goal = L.meetingSeats[Math.max(0, k) % L.meetingSeats.length];
-          text = '🗣 refinando';
+          text = '🗣 refining';
           break;
         }
         case 'reviewing':
@@ -188,7 +188,7 @@ export class OfficeScene extends Phaser.Scene {
         }
         default:
           if (dev.role === 'techlead') {
-            goal = L.desks[i % L.desks.length].seat; // TL sem PR pra revisar fica na mesa
+            goal = L.desks[i % L.desks.length].seat; // TL with no PR to review stays at the desk
             text = '🧭 TL';
           } else {
             goal = L.idleSpots[idleIdx++ % L.idleSpots.length];
@@ -206,7 +206,7 @@ export class OfficeScene extends Phaser.Scene {
       }
     });
 
-    // PO: na mesa dele, ou na cabeceira da reunião
+    // PO: at their desk, or at the head of the meeting table
     const poGoal = !sim.working ? L.outside : sim.inDaily ? L.poStandup : sim.meeting ? L.poMeetingSeat : L.poSeat;
     this.steer(this.po, poGoal, sim.working);
     this.moveWalker(this.po, dt, speed, sim.inDaily ? '📋 daily' : sim.meeting ? '📋 PO' : '');
@@ -288,7 +288,7 @@ export class OfficeScene extends Phaser.Scene {
     const seen = new Set<number>();
     const overflow = { backlog: 0, ready: 0, review: 0, done: 0 };
 
-    // done mais recentes primeiro
+    // most recently done first
     const ordered = [...sim.tickets].sort((a, b) =>
       a.stage === 'done' && b.stage === 'done' ? b.doneAt! - a.doneAt! : 0,
     );
@@ -311,12 +311,12 @@ export class OfficeScene extends Phaser.Scene {
           const c = this.cards.get(tk.id);
           const w = this.devs[tk.devId!];
           const desk = L.desks[tk.devId! % L.desks.length];
-          // feature pausada (dev interrompido por refatoração) fica ao lado, sem empilhar
+          // paused feature (dev interrupted by a refactor) sits next to it, not stacked
           const paused = sim.devs[tk.devId!]?.pausedTicketId === tk.id;
           const spot = paused ? { x: desk.card.x - 0.45, y: desk.card.y } : desk.card;
-          if (c && (c.stage !== 'doing' || !c.picked)) target = { ...c.pos }; // espera no quadro
+          if (c && (c.stage !== 'doing' || !c.picked)) target = { ...c.pos }; // waits on the board
           else if (c?.carrying && w) {
-            // leva do quadro até a mesa; ao chegar na cadeira, o card desce pra mesa
+            // carried from the board to the desk; once at the chair, the card goes down on the desk
             const atDesk = !w.path.length && Math.hypot(w.pos.x - desk.seat.x, w.pos.y - desk.seat.y) < 0.2;
             if (atDesk || !w.visible) c.carrying = false;
             target = c.carrying ? { x: w.pos.x + 0.3, y: w.pos.y - 0.1 } : spot;
@@ -357,7 +357,7 @@ export class OfficeScene extends Phaser.Scene {
         this.cards.set(tk.id, card);
       }
       if (card.stage !== tk.stage) {
-        // só precisa buscar no quadro se saiu da coluna "pronto"; retrabalho volta direto pra mesa
+        // only needs fetching from the board if it left the "ready" column; rework goes straight to the desk
         card.picked = card.stage !== 'ready' || tk.kind === 'bug';
         card.carrying = false;
         card.stage = tk.stage;
@@ -402,7 +402,7 @@ export class OfficeScene extends Phaser.Scene {
       tk.reviews.forEach((rv, i) => {
         const x = px - (tk.reviews.length - 1) * 2.5 + i * 5;
         g.fillStyle(rv.done ? 0x35c46a : rv.started ? 0xffd34d : 0x5b5b66, 1);
-        if (rv.role === 'techlead') g.fillRect(x - 1.8, py - 9.8, 3.6, 3.6); // TL = quadrado
+        if (rv.role === 'techlead') g.fillRect(x - 1.8, py - 9.8, 3.6, 3.6); // TL = square
         else g.fillCircle(x, py - 8, 1.8);
       });
     }
@@ -412,13 +412,13 @@ export class OfficeScene extends Phaser.Scene {
     }
   }
 
-  // ---- overlays dinâmicos -----------------------------------------------------
+  // ---- dynamic overlays --------------------------------------------------------
 
   private drawOverlay(sim: Sim) {
     const g = this.overlay;
     g.clear();
     const L = this.layout;
-    // barras de canary
+    // canary bars
     sim.envs.forEach((env, i) => {
       const r = L.racks[i];
       const x = r.bar.x * TILE - 14, y = r.bar.y * TILE;
@@ -432,7 +432,7 @@ export class OfficeScene extends Phaser.Scene {
         if (recent) g.fillStyle(env.result === 'ok' ? 0x35c46a : 0xe5484d, 1).fillRoundedRect(x, y, 28, 3, 1.5);
         this.rackTexts[i].setText(`${env.name.toUpperCase()}\n `);
       }
-      // LEDs do rack
+      // rack LEDs
       const lx = r.label.x * TILE - 10, ly = 18 * TILE + 3;
       const busy = env.batch.length > 0;
       for (let k = 0; k < 4; k++) {
@@ -441,7 +441,7 @@ export class OfficeScene extends Phaser.Scene {
       }
     });
 
-    // destaque do card sob o mouse no kanban: anel pulsando + número
+    // highlight of the card under the mouse in the kanban: pulsing ring + number
     const hl = this.hooks.highlightId();
     const hc = hl != null ? this.cards.get(hl) : undefined;
     if (hc) {
@@ -452,7 +452,7 @@ export class OfficeScene extends Phaser.Scene {
       this.hlText.setText(`#${hl}`).setPosition(x, y - r - 9).setVisible(true);
     } else this.hlText.setVisible(false);
 
-    // alarme de incidente
+    // incident alarm
     if (sim.tickets.some((tk) => tk.kind === 'bug' && tk.stage !== 'done')) {
       const a = 0.35 + 0.35 * Math.sin(this.time.now / 180);
       g.lineStyle(3, 0xff3b3b, a).strokeRect(1.5, 1.5, MAP_W * TILE - 3, MAP_H * TILE - 3);
@@ -460,7 +460,7 @@ export class OfficeScene extends Phaser.Scene {
       g.fillStyle(0xff3b3b, a * 0.5).fillCircle(prod.label.x * TILE, 18.5 * TILE, 14);
     }
 
-    // linha do revisor até a PR que ele está lendo
+    // line from the reviewer to the PR being read
     const d = this.dyn;
     d.clear();
     sim.devs.forEach((dev, i) => {
@@ -487,11 +487,11 @@ export class OfficeScene extends Phaser.Scene {
     this.lamp.setVisible(!!sim.deploySession && a > 0.1);
   }
 
-  // ---- montagem estática ------------------------------------------------------
+  // ---- static setup ------------------------------------------------------------
 
   private makeTextures() {
     const g = this.make.graphics({}, false);
-    // card de tarefa (branco, tingido pela cor da ticket)
+    // task card (white, tinted with the ticket color)
     g.fillStyle(0x000000, 0.35).fillRect(1, 1, 7, 8);
     g.fillStyle(0xffffff, 1).fillRect(0, 0, 7, 8);
     g.fillStyle(0xdddddd, 1).fillRect(1, 3, 5, 1).fillRect(1, 5, 4, 1);
@@ -541,7 +541,7 @@ export class OfficeScene extends Phaser.Scene {
           c.fillRect(px, py, 1, TILE);
         }
       }
-    // quadros de avisos
+    // notice boards
     for (const b of L.board) {
       const x = b.x * TILE, y = b.y * TILE, w = b.w * TILE, h = b.h * TILE;
       c.fillStyle = '#6b4a2b';
