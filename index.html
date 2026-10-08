@@ -10,9 +10,14 @@
     <div id="app">
       <header>
         <div class="brand">DevLife <span>Simulator</span></div>
-        <div id="clock" class="clock"></div>
+        <div class="timebox">
+          <div id="clock" class="clock"></div>
+          <div id="progress" class="progress"><div></div></div>
+        </div>
         <div id="speeds" class="speeds"></div>
         <label class="toggle"><input type="checkbox" id="fastNights" checked /> <i class="fa-solid fa-forward"></i> fast-forward nights</label>
+        <button id="runEnd" class="btn icon" title="Run to the end (computes the rest instantly)"><i class="fa-solid fa-forward-step"></i></button>
+        <button id="reportBtn" class="btn icon" title="Report"><i class="fa-solid fa-chart-column"></i></button>
         <button id="restart" class="btn"><i class="fa-solid fa-rotate-right"></i> Restart</button>
         <button id="shareBtn" class="btn" title="Copy a link with the current settings"><i class="fa-solid fa-link"></i> Share</button>
         <button id="configBtn" class="btn"><i class="fa-solid fa-sliders"></i> Settings</button>
@@ -28,6 +33,18 @@
         </aside>
       </main>
       <section id="kanban"></section>
+      <div id="report" class="modal" hidden>
+        <div class="modal-card">
+          <div class="modal-head">
+            <h2 id="reportTitle">Report</h2>
+            <div class="modal-actions">
+              <button id="reportRestart" class="btn"><i class="fa-solid fa-rotate-right"></i> Run again</button>
+              <button id="reportClose" class="btn" aria-label="Close"><i class="fa-solid fa-xmark"></i></button>
+            </div>
+          </div>
+          <div id="reportBody"></div>
+        </div>
+      </div>
       <div id="config" class="drawer" hidden>
         <div class="drawer-head">
           <h2>Settings</h2>

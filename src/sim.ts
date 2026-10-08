@@ -18,6 +18,7 @@ export const MAX_DEVS = 8;
 
 export interface Config {
   seed: number;
+  maxDays: number; // simulation length in calendar days (0 = run forever)
   aiUsage: number; // % of coding done with AI assistance (0 = no AI)
   aiSpeedup: number; // % less coding time at 100% usage
   aiSweetSpot: number; // usage % up to which AI slightly improves quality; above it quality degrades
@@ -81,6 +82,7 @@ export interface Config {
 
 export const defaultConfig: Config = {
   seed: 42,
+  maxDays: 730,
   aiUsage: 0,
   aiSpeedup: 45,
   aiSweetSpot: 40,
@@ -510,8 +512,24 @@ export class Sim {
     return this.tickets.filter((tk) => tk.stage === stage);
   }
 
+  static readonly START_T = 8; // Monday 08:00
+
+  /** Simulated time at which the run ends (Infinity when unlimited). */
+  get endT() {
+    return this.cfg.maxDays > 0 ? Sim.START_T + this.cfg.maxDays * 24 : Infinity;
+  }
+
+  get finished() {
+    return this.t >= this.endT - 1e-9;
+  }
+
+  /** 0..1 of the configured run length. */
+  get progress() {
+    return Number.isFinite(this.endT) ? Math.min(1, (this.t - Sim.START_T) / (this.endT - Sim.START_T)) : 0;
+  }
+
   step(hours: number) {
-    let left = hours;
+    let left = Math.min(hours, this.endT - this.t);
     while (left > 1e-9) {
       const h = Math.min(0.1, left);
       this.tick(h);
@@ -1160,6 +1178,55 @@ export class Sim {
   }
 
   // ---- metrics --------------------------------------------------------------
+
+  /** Whole-run summary for the final report. */
+  report() {
+    const days = (this.t - Sim.START_T) / 24;
+    const weeks = Math.max(1 / 7, days / 7);
+    const features = this.tickets.filter((tk) => tk.kind === 'feature' && tk.doneAt != null);
+    const leads = features.map((tk) => (tk.doneAt! - tk.createdAt) / 24).sort((a, b) => a - b);
+    const pct = (q: number) => (leads.length ? leads[Math.min(leads.length - 1, Math.floor(q * leads.length))] : 0);
+    const bugs = this.tickets.filter((tk) => tk.kind === 'bug');
+    const fixed = bugs.filter((tk) => tk.doneAt != null);
+    const releases = this.tags.filter((t) => !t.hotfix && t.status === 'done');
+    const weekly: number[] = Array.from({ length: Math.ceil(days / 7) }, () => 0);
+    for (const tk of features) weekly[Math.min(weekly.length - 1, Math.floor((tk.doneAt! - Sim.START_T) / 168))]++;
+    const team = this.devs
+      .filter((d) => d.role === 'dev')
+      .map((d) => {
+        const mine = features.filter((tk) => tk.author === d.id);
+        return {
+          name: d.name,
+          level: d.level,
+          delivered: mine.length,
+          devDays: mine.length ? mine.reduce((s, tk) => s + (tk.time.doing ?? 0), 0) / mine.length / 24 : 0,
+          comments: mine.length ? mine.reduce((s, tk) => s + tk.comments, 0) / mine.length : 0,
+          bugs: bugs.filter((b) => this.ticket(b.parentId)?.author === d.id).length,
+        };
+      });
+    return {
+      days,
+      finished: this.finished,
+      demands: this.tickets.filter((tk) => tk.kind === 'feature').length,
+      delivered: features.length,
+      throughputWeek: features.length / weeks,
+      lead: { avg: leads.length ? leads.reduce((a, b) => a + b, 0) / leads.length : 0, p50: pct(0.5), p85: pct(0.85) },
+      wipEnd: this.tickets.filter((tk) => !['backlog', 'done'].includes(tk.stage)).length,
+      backlogEnd: this.inStage('backlog').length,
+      all: this.metrics(Math.ceil(days) + 1),
+      bugs: bugs.length,
+      bugsOpen: bugs.length - fixed.length,
+      mttrHours: fixed.length ? fixed.reduce((s, tk) => s + (tk.doneAt! - tk.createdAt), 0) / fixed.length : 0,
+      rollbacks: this.tags.filter((t) => t.status === 'rolledback').length,
+      releases: releases.length,
+      hotfixes: this.tags.filter((t) => t.hotfix).length,
+      nightHours: this.nightHours,
+      aiSaved: this.aiSaved,
+      aiCost: this.aiCost,
+      weekly,
+      team,
+    };
+  }
 
   metrics(windowDays = 30) {
     const since = this.t - windowDays * 24;

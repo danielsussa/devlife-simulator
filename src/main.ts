@@ -5,7 +5,7 @@ import './style.css';
 import { OfficeScene } from './scene';
 import { defaultConfig, Sim } from './sim';
 import { loadConfigFromUrl, shareUrl, syncUrl } from './share';
-import { buildConfigForm, ic, renderClock, renderKanban, renderLog, renderMetrics, renderTeam } from './ui';
+import { buildConfigForm, ic, renderClock, renderKanban, renderLog, renderMetrics, renderProgress, renderReport, renderTeam } from './ui';
 
 const cfg = structuredClone(defaultConfig);
 loadConfigFromUrl(cfg); // setup shared via ?cfg=
@@ -33,7 +33,11 @@ const hoursPerSecond = () => {
 
 const scene = new OfficeScene({
   sim: () => sim,
-  tick: (dt) => sim.step(dt * hoursPerSecond()),
+  tick: (dt) => {
+    if (runningToEnd) return;
+    sim.step(dt * hoursPerSecond());
+    checkFinished();
+  },
   hoursPerSecond,
   highlightId: () => highlightId,
 });
@@ -52,6 +56,8 @@ function wireSim() {
 wireSim();
 
 function restart() {
+  runningToEnd = false;
+  reportShown = false;
   sim = new Sim(cfg);
   wireSim();
   scene.rebuild();
@@ -125,8 +131,62 @@ window.addEventListener('blur', () => {
   highlightId = null;
 });
 
+// ---- run length, run-to-end and report ----
+let reportShown = false;
+let runningToEnd = false;
+const reportEl = document.getElementById('report')!;
+const runEndBtn = document.getElementById('runEnd') as HTMLButtonElement;
+
+function openReport() {
+  renderReport(sim);
+  reportEl.hidden = false;
+}
+
+function checkFinished() {
+  if (!sim.finished || reportShown) return;
+  reportShown = true;
+  speed = 0;
+  renderSpeeds();
+  renderAll();
+  openReport();
+}
+
+runEndBtn.addEventListener('click', () => {
+  if (!Number.isFinite(sim.endT) || sim.finished || runningToEnd) return;
+  runningToEnd = true;
+  runEndBtn.disabled = true;
+  const chunk = () => {
+    if (!runningToEnd) return;
+    const t0 = performance.now();
+    while (!sim.finished && performance.now() - t0 < 30) sim.step(24); // ~30ms of work per frame keeps the UI alive
+    renderProgress(sim);
+    renderClock(sim);
+    if (sim.finished) {
+      runningToEnd = false;
+      runEndBtn.disabled = false;
+      checkFinished();
+    } else requestAnimationFrame(chunk);
+  };
+  requestAnimationFrame(chunk);
+});
+document.getElementById('reportBtn')!.addEventListener('click', openReport);
+document.getElementById('reportClose')!.addEventListener('click', () => (reportEl.hidden = true));
+document.getElementById('reportRestart')!.addEventListener('click', () => {
+  reportEl.hidden = true;
+  restart();
+  speed = 3;
+  renderSpeeds();
+});
+reportEl.addEventListener('click', (e) => {
+  if (e.target === reportEl) reportEl.hidden = true;
+});
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') reportEl.hidden = true;
+});
+
 function renderAll() {
   renderClock(sim);
+  renderProgress(sim);
   renderKanban(sim);
   pickHighlight();
   renderMetrics(sim);

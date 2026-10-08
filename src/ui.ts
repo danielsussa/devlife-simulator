@@ -339,6 +339,7 @@ const GROUPS: { title: string; icon: string; fields: Field[]; matrix?: Matrix; n
       { key: 'bugFixHoursMax', label: 'Fix effort, max (dev-hours)', min: 0.5, max: 80, step: 0.5 },
       { key: 'hotfixHours', label: 'Hotfix rollout to production (h)', min: 0.25, max: 24, step: 0.25 },
       { key: 'seed', label: 'Random seed', min: 1, max: 999999, step: 1, restart: true },
+      { key: 'maxDays', label: 'Simulation length (days, 0 = forever)', min: 0, max: 3650, step: 1 },
     ],
   },
 ];
@@ -406,4 +407,97 @@ export function renderTeam(sim: Sim) {
     })
     .join('');
   $('team').innerHTML = `<table class="team"><thead><tr><th>Dev</th><th>Level</th><th title="Features delivered (30d)">${ic('truck-fast')}</th><th title="Avg time in development">${ic('code')}</th><th title="Review comments per delivery">${ic('comment-dots')}</th><th title="Production bugs caused (30d)">${ic('bug')}</th></tr></thead><tbody>${rows}</tbody></table>`;
+}
+
+// ---- progress & final report ------------------------------------------------------
+
+export function renderProgress(sim: Sim) {
+  const el = $('progress');
+  const unlimited = !Number.isFinite(sim.endT);
+  el.hidden = unlimited;
+  (el.firstElementChild as HTMLElement).style.width = `${sim.progress * 100}%`;
+  el.classList.toggle('done', sim.finished);
+  el.title = unlimited ? '' : `Day ${Math.floor((sim.t - Sim.START_T) / 24) + 1} of ${sim.cfg.maxDays} (${Math.round(sim.progress * 100)}%)`;
+}
+
+const fmtDays = (d: number) => (d ? d.toFixed(1) + 'd' : '–');
+
+/** Deliveries per week as a thin bar chart (hover a bar for its value). */
+function weeklyChart(weekly: number[]) {
+  const W = 640, H = 140, pad = { l: 26, b: 18, t: 8 };
+  const max = Math.max(1, ...weekly);
+  const bw = (W - pad.l) / Math.max(1, weekly.length);
+  const y = (v: number) => pad.t + (H - pad.t - pad.b) * (1 - v / max);
+  const bars = weekly
+    .map((v, i) => {
+      const x = pad.l + i * bw;
+      const h = H - pad.b - y(v);
+      return `<g><rect class="hit" x="${x}" y="${pad.t}" width="${bw}" height="${H - pad.t - pad.b}"><title>Week ${i + 1}: ${v} deliver${v === 1 ? 'y' : 'ies'}</title></rect>${
+        v ? `<rect class="wbar" x="${x + Math.min(1, bw * 0.15)}" y="${y(v)}" width="${Math.max(1, bw - Math.min(2, bw * 0.3))}" height="${h}" rx="${Math.min(2, bw / 3)}"><title>Week ${i + 1}: ${v}</title></rect>` : ''
+      }</g>`;
+    })
+    .join('');
+  const ticks = [0, Math.round(max / 2), max]
+    .map((v) => `<text x="${pad.l - 6}" y="${y(v) + 3}" text-anchor="end">${v}</text><line x1="${pad.l}" x2="${W}" y1="${y(v)}" y2="${y(v)}"/>`)
+    .join('');
+  const step = Math.max(1, Math.round(weekly.length / 8));
+  const xl = weekly
+    .map((_, i) => (i % step === 0 && pad.l + i * bw + bw / 2 < W - 14 ? `<text x="${pad.l + i * bw + bw / 2}" y="${H - 4}" text-anchor="middle">w${i + 1}</text>` : ''))
+    .join('');
+  return `<svg class="chart" viewBox="0 0 ${W} ${H}" role="img" aria-label="Deliveries per week">${ticks}${bars}${xl}</svg>`;
+}
+
+export function renderReport(sim: Sim) {
+  const r = sim.report();
+  const m = r.all;
+  const total = m.stages.reduce((s, x) => s + x.days, 0);
+  const top = m.stages.reduce((a, b) => (b.days > a.days ? b : a), m.stages[0]);
+  const team = `${sim.cfg.seniors} senior · ${sim.cfg.mids} mid · ${sim.cfg.juniors} junior · ${sim.cfg.techLeads} TL`;
+  $('reportTitle').innerHTML = `${ic('chart-column')} ${r.finished ? 'Simulation report' : 'Report so far'} <small>${Math.round(r.days)} days · ${team}${
+    sim.cfg.aiUsage ? ` · AI ${sim.cfg.aiUsage}%` : ''
+  }</small>`;
+  const sec = (title: string, icon: string, body: string) => `<section><h3>${ic(icon)} ${title}</h3>${body}</section>`;
+  const tiles = (xs: string[]) => `<div class="tiles">${xs.join('')}</div>`;
+  $('reportBody').innerHTML = `
+    ${sec('Delivery', 'truck-fast', tiles([
+      tile('flag-checkered', String(r.delivered), `features delivered (of ${r.demands} demands)`),
+      tile('truck-fast', r.throughputWeek.toFixed(1), 'deliveries / week'),
+      tile('stopwatch', fmtDays(r.lead.avg), 'avg lead time'),
+      tile('stopwatch', fmtDays(r.lead.p50), 'lead time p50'),
+      tile('stopwatch', fmtDays(r.lead.p85), 'lead time p85'),
+      tile('gauge-high', r.delivered ? Math.round(m.flowEfficiency * 100) + '%' : '–', 'flow efficiency'),
+      tile('layer-group', String(r.wipEnd), 'WIP at the end'),
+      tile('inbox', String(r.backlogEnd), 'backlog at the end'),
+    ]))}
+    ${sec('Deliveries per week', 'chart-column', weeklyChart(r.weekly))}
+    ${sec('Where work spends its time', 'hourglass-half', r.delivered ? `<div class="bar">${m.stages
+      .map((s, i) => `<div title="${s.label}: ${s.days.toFixed(1)}d" style="flex:${s.days / total};background:var(${SERIES[i % SERIES.length]})"></div>`)
+      .join('')}</div><ul class="legend cols">${m.stages
+      .map((s, i) => `<li class="${s === top ? 'top' : ''}"><i style="background:var(${SERIES[i % SERIES.length]})"></i>${s.label}<b>${s.days.toFixed(1)}d</b></li>`)
+      .join('')}</ul>` : '<div class="more">No deliveries.</div>')}
+    ${sec('Quality', 'shield-halved', tiles([
+      tile('comment-dots', m.commentsPerPR.toFixed(2), 'review comments per delivery'),
+      tile('code-merge', m.conflictsPerPR.toFixed(2), 'merge conflicts per delivery'),
+      tile('wrench', Math.round(m.devTime.reworkOfCoding * 100) + '%', 'of coding is refactoring'),
+      tile('bug', String(r.bugs), `production bugs${r.bugsOpen ? ` (${r.bugsOpen} open)` : ''}`),
+      tile('truck-medical', r.mttrHours ? days(r.mttrHours) : '–', 'avg time to fix a bug'),
+      tile('rotate-left', String(r.rollbacks), 'canary rollbacks'),
+    ]))}
+    ${sec('Deploy & people', 'rocket', tiles([
+      tile('tag', String(r.releases), `releases (${r.hotfixes} hotfixes)`),
+      tile('tag', m.prsPerTag ? m.prsPerTag.toFixed(1) : '–', 'PRs per tag (last 30d)'),
+      tile('moon', Math.round(r.nightHours) + 'h', 'late-night deploy hours'),
+      tile('mug-hot', Math.round(m.devTime.idle * 100) + '%', 'devs idle (working hours)'),
+      tile('users', Math.round(m.devTime.meetings * 100) + '%', 'in daily + refinement'),
+      tile('fire', Math.round(m.devTime.bugfix * 100) + '%', 'firefighting'),
+    ]))}
+    ${sim.cfg.aiUsage ? sec('AI ledger', 'robot', tiles([
+      tile('robot', '+' + Math.round(r.aiSaved) + 'h', 'dev-hours saved'),
+      tile('robot', '−' + Math.round(r.aiCost) + 'h', 'dev-hours lost', r.aiCost > r.aiSaved ? 'alarm' : ''),
+      tile('scale-balanced', (r.aiSaved >= r.aiCost ? '+' : '−') + Math.round(Math.abs(r.aiSaved - r.aiCost)) + 'h', 'net (direct costs only)'),
+    ])) : ''}
+    ${sec('Team', 'user-group', `<table class="team"><thead><tr><th>Dev</th><th>Level</th><th>Delivered</th><th>Avg dev time</th><th>Comments / PR</th><th>Bugs caused</th></tr></thead><tbody>${r.team
+      .map((d) => `<tr><td>${esc(d.name)}</td><td><span class="lvl ${d.level}">${d.level}</span></td><td>${d.delivered}</td><td>${fmtDays(d.devDays)}</td><td>${d.delivered ? d.comments.toFixed(2) : '–'}</td><td>${d.bugs}</td></tr>`)
+      .join('')}</tbody></table>`)}
+  `;
 }
