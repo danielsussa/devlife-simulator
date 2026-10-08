@@ -18,6 +18,12 @@ export const MAX_DEVS = 8;
 
 export interface Config {
   seed: number;
+  aiUsage: number; // % of coding done with AI assistance (0 = no AI)
+  aiSpeedup: number; // % less coding time at 100% usage
+  aiSweetSpot: number; // usage % up to which AI slightly improves quality; above it quality degrades
+  aiQualityPenalty: number; // % more review comments and production bugs at 100% usage (mid-level dev)
+  aiReviewOverhead: number; // % more review effort and merge-conflict chance at 100% usage (bigger diffs)
+  aiDebugPenalty: number; // % longer bug fixes at 100% usage (code nobody really wrote)
   seniors: number; // team composition (total up to 8 devs)
   mids: number;
   juniors: number;
@@ -75,6 +81,12 @@ export interface Config {
 
 export const defaultConfig: Config = {
   seed: 42,
+  aiUsage: 0,
+  aiSpeedup: 45,
+  aiSweetSpot: 40,
+  aiQualityPenalty: 80,
+  aiReviewOverhead: 50,
+  aiDebugPenalty: 40,
   seniors: 1,
   mids: 3,
   juniors: 1,
@@ -326,6 +338,8 @@ export class Sim {
   private releaseSeq = 0;
   private nextTagId = 1;
   nightHours = 0; // late-night hours accumulated in deploys
+  aiSaved = 0; // dev-hours AI saved (faster coding, fewer issues below the sweet spot)
+  aiCost = 0; // dev-hours AI cost (bigger reviews, extra comments/bugs/conflicts, harder debugging)
   private lastDeployNight = -1;
   private deployDay = -1; // current "deploy day" (the night window counts for the day it started)
   private envsDeployedToday = 0;
@@ -354,6 +368,8 @@ export class Sim {
     this.releaseSeq = 0;
     this.nextTagId = 1;
     this.nightHours = 0;
+    this.aiSaved = 0;
+    this.aiCost = 0;
     this.lastDeployNight = -1;
     this.deployDay = -1;
     this.envsDeployedToday = 0;
@@ -394,6 +410,56 @@ export class Sim {
 
   isProdEnv(i: number) {
     return i >= this.firstProdEnv;
+  }
+
+  // ---- AI assistance ----------------------------------------------------------
+
+  private get aiU() {
+    return Math.min(1, Math.max(0, this.cfg.aiUsage / 100));
+  }
+
+  /** Coding time multiplier (< 1 = faster). */
+  private aiSpeed() {
+    return 1 - (this.cfg.aiSpeedup / 100) * this.aiU;
+  }
+
+  /**
+   * Quality multiplier on review-comment and bug chances. Up to the sweet spot AI catches
+   * small mistakes (down to 0.85×); beyond it over-reliance kicks in and it grows (convex)
+   * up to 0.85 + penalty at 100%. Juniors are hit harder, seniors less.
+   */
+  aiQuality(level: Level) {
+    const u = this.aiU;
+    const s = Math.min(0.99, Math.max(0.01, this.cfg.aiSweetSpot / 100));
+    if (u <= s) return 1 - 0.15 * (u / s);
+    const over = (u - s) / (1 - s);
+    const levelFactor = { junior: 1.5, mid: 1, senior: 0.6 }[level];
+    return 0.85 + (this.cfg.aiQualityPenalty / 100) * levelFactor * Math.pow(over, 1.5);
+  }
+
+  /** Bigger AI-generated diffs: more review effort and more merge conflicts. */
+  private aiDiff() {
+    return 1 + (this.cfg.aiReviewOverhead / 100) * this.aiU;
+  }
+
+  /** Debugging code nobody really wrote: only above the sweet spot. */
+  private aiDebug() {
+    const s = Math.min(0.99, Math.max(0.01, this.cfg.aiSweetSpot / 100));
+    return 1 + (this.cfg.aiDebugPenalty / 100) * Math.max(0, (this.aiU - s) / (1 - s));
+  }
+
+  /** Coding hours with AI applied; credits the saved time. */
+  private aiCoding(hours: number) {
+    const eff = hours * this.aiSpeed();
+    this.aiSaved += hours - eff;
+    return eff;
+  }
+
+  /** Books the expected cost (or saving) of a probability change caused by AI. */
+  private aiLedger(baseP: number, aiP: number, hoursIfHappens: number) {
+    const delta = (aiP - baseP) / 100;
+    if (delta > 0) this.aiCost += delta * hoursIfHappens;
+    else this.aiSaved += -delta * hoursIfHappens;
   }
 
   /** Traits of a level, read live from the config. */
@@ -599,7 +665,8 @@ export class Sim {
           tk.author = dev.id;
           // the same feature takes longer for a slower dev (feature size is calibrated for a mid-level dev)
           const mid = (this.cfg.devDaysMin + this.cfg.devDaysMax) / 2 || 1;
-          tk.workOriginal = tk.workTotal = tk.size * (this.profile(dev.id).daysPerFeature / mid) * WORK_HOURS_PER_DAY;
+          tk.workOriginal = tk.size * (this.profile(dev.id).daysPerFeature / mid) * WORK_HOURS_PER_DAY;
+          tk.workTotal = this.aiCoding(tk.workOriginal);
         }
       });
       dev.ticketId = tk.id;
@@ -668,9 +735,13 @@ export class Sim {
       dev.reviewTicketId = null;
       const rv = tk.reviews.find((r) => r.devId === dev.id && r.started && !r.done);
       if (!rv) continue;
-      if (tk.kind === 'feature' && this.rand() * 100 < this.authorProfile(tk).commentPct) {
+      const author = this.authorProfile(tk);
+      const commentP = author.commentPct * this.aiQuality(author.level);
+      if (tk.kind === 'feature')
+        this.aiLedger(author.commentPct, commentP, tk.workOriginal * ((this.cfg.refactorPctMin + this.cfg.refactorPctMax) / 200));
+      if (tk.kind === 'feature' && this.rand() * 100 < commentP) {
         tk.comments++;
-        const hours = this.reworkHoursFor(tk, this.cfg.refactorPctMin / 100, this.cfg.refactorPctMax / 100);
+        const hours = this.aiCoding(this.reworkHoursFor(tk, this.cfg.refactorPctMin / 100, this.cfg.refactorPctMax / 100));
         this.emit('review-changes', `${dev.name} flagged an issue on PR #${tk.id}: ~${hours.toFixed(0)}h refactor`, {
           devId: dev.id,
           ticketId: tk.id,
@@ -692,7 +763,8 @@ export class Sim {
         if (act === 'meeting' || act === 'reviewing' || act === 'away') continue;
         rv.started = true;
         dev.reviewTicketId = tk.id;
-        dev.reviewLeft = this.cfg.reviewEffortHours;
+        dev.reviewLeft = this.cfg.reviewEffortHours * (tk.kind === 'feature' ? this.aiDiff() : 1);
+        this.aiCost += dev.reviewLeft - this.cfg.reviewEffortHours;
       }
     }
   }
@@ -767,9 +839,11 @@ export class Sim {
   private rollConflicts(merged: Ticket) {
     const open = this.inStage('review').filter((tk) => tk.kind === 'feature' && tk !== merged);
     for (const tk of open) {
-      if (this.rand() * 100 >= this.cfg.conflictPct) continue;
+      const p = Math.min(100, this.cfg.conflictPct * this.aiDiff());
+      this.aiLedger(this.cfg.conflictPct, p, (this.cfg.conflictHoursMin + this.cfg.conflictHoursMax) / 2);
+      if (this.rand() * 100 >= p) continue;
       tk.conflicts++;
-      const hours = this.uniform(this.cfg.conflictHoursMin, this.cfg.conflictHoursMax);
+      const hours = this.aiCoding(this.uniform(this.cfg.conflictHoursMin, this.cfg.conflictHoursMax));
       this.emit('review-changes', `⚔ Merging #${merged.id} conflicted with PR #${tk.id}: back to resolve (~${hours.toFixed(0)}h) and re-review`, {
         devId: tk.author ?? undefined,
         ticketId: tk.id,
@@ -838,7 +912,7 @@ export class Sim {
           culprit.rollbacks++;
           tag.status = 'rolledback';
           for (const tk of batch) tk.deploying = false;
-          this.sendBack(culprit, this.reworkHoursFor(culprit, 0.1, 0.3));
+          this.sendBack(culprit, this.aiCoding(this.reworkHoursFor(culprit, 0.1, 0.3)));
           const rest = batch.filter((tk) => tk !== culprit);
           const patch = rest.length ? this.newTag(patchName(tag.name, this.tags), rest, 0, false) : null;
           if (patch) for (const tk of rest) this.move(tk, () => ((tk.tagId = patch.id), (tk.envIndex = 0)));
@@ -858,8 +932,13 @@ export class Sim {
               tk.deploying = false;
               tk.envIndex++;
               // reached the first production environment: real users, a bug may show up
-              if (i === this.firstProdEnv && tk.bugAt == null && this.rand() * 100 < this.authorProfile(tk).bugPct)
-                tk.bugAt = this.t + this.rand() * this.cfg.bugMaxDaysAfter * 24;
+              if (i === this.firstProdEnv && tk.bugAt == null && tk.kind === 'feature') {
+                const author = this.authorProfile(tk);
+                const bugP = author.bugPct * this.aiQuality(author.level);
+                const fixHours = ((this.cfg.bugFixHoursMin + this.cfg.bugFixHoursMax) / 2) * this.aiDebug();
+                this.aiLedger(author.bugPct, bugP, fixHours);
+                if (this.rand() * 100 < bugP) tk.bugAt = this.t + this.rand() * this.cfg.bugMaxDaysAfter * 24;
+              }
               if (tk.envIndex >= this.envs.length) {
                 tk.stage = 'done';
                 tk.doneAt = this.t;
@@ -970,7 +1049,9 @@ export class Sim {
       if (f.bugAt == null || this.t < f.bugAt) continue;
       f.bugAt = null;
       const id = this.nextId++;
-      const hours = this.uniform(this.cfg.bugFixHoursMin, this.cfg.bugFixHoursMax);
+      const base = this.uniform(this.cfg.bugFixHoursMin, this.cfg.bugFixHoursMax);
+      const hours = base * this.aiDebug();
+      this.aiCost += hours - base;
       const bug: Ticket = {
         ...structuredClone(f),
         id,
@@ -1116,6 +1197,8 @@ export class Sim {
       bugs: bugs.length,
       openBugs: this.tickets.filter((tk) => tk.kind === 'bug' && tk.stage !== 'done').length,
       mttrHours: fixed.length ? fixed.reduce((sum, tk) => sum + (tk.doneAt! - tk.createdAt), 0) / fixed.length : 0,
+      aiSavedWeek: this.t > 8 ? (this.aiSaved / ((this.t - 8) / 24)) * 7 : 0,
+      aiCostWeek: this.t > 8 ? (this.aiCost / ((this.t - 8) / 24)) * 7 : 0,
       nightHoursWeek: elapsedDays > 0 ? (this.nightHours / ((this.t - 8) / 24)) * 7 : 0,
       wip: this.tickets.filter((tk) => !['backlog', 'done'].includes(tk.stage)).length,
       backlog: this.inStage('backlog').length,

@@ -184,7 +184,7 @@ export class OfficeScene extends Phaser.Scene {
         case 'coding': {
           goal = mustFetch ? fetchSpot : L.desks[i % L.desks.length].seat;
           const tk = sim.ticket(dev.ticketId)!;
-          text = `${tk.rework ? '🔧' : '💻'} #${tk.id} ${Math.floor((100 * tk.workDone) / tk.workTotal)}%`;
+          text = `${tk.rework ? '🔧' : sim.cfg.aiUsage > 0 ? '🤖' : '💻'} #${tk.id} ${Math.floor((100 * tk.workDone) / tk.workTotal)}%`;
           break;
         }
         default:

@@ -11,6 +11,11 @@ The team is defined by its composition (seniors / mid-levels / juniors) and per-
 feature, % of PRs with review comments, % of deliveries with a production bug, review pickup speed); the sidebar
 shows per-dev results.
 
+**AI-powered mode** models the pros and cons of AI usage: faster coding and slightly fewer mistakes up to a
+sweet spot; beyond it, over-reliance increases review comments and production bugs (juniors hit harder), diffs get
+bigger (more review effort and merge conflicts) and bugs take longer to debug. The sidebar keeps an AI ledger of
+dev-hours saved vs. lost.
+
 Everything is configurable (⚙ Settings, shareable via the URL) and the metrics show lead time, throughput, bottleneck,
 flow efficiency, idle time, rework, night hours and bug fix time.
 

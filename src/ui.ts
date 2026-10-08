@@ -57,6 +57,9 @@ export function renderMetrics(sim: Sim) {
       ${tile('truck-medical', m.mttrHours ? days(m.mttrHours) : '–', 'avg time to fix a bug')}
       ${tile('fire', Math.round(m.devTime.bugfix * 100) + '%', 'of the team firefighting')}
       ${tile('moon', m.nightHoursWeek.toFixed(1) + 'h', 'late-night / week')}
+      ${sim.cfg.aiUsage > 0 ? tile('robot', '+' + m.aiSavedWeek.toFixed(0) + 'h', 'AI dev-hours saved / week') : ''}
+      ${sim.cfg.aiUsage > 0 ? tile('robot', '−' + m.aiCostWeek.toFixed(0) + 'h', 'AI dev-hours lost / week (review, rework, bugs)', m.aiCostWeek > m.aiSavedWeek ? 'alarm' : '') : ''}
+      ${sim.cfg.aiUsage > 0 ? tile('scale-balanced', (m.aiSavedWeek - m.aiCostWeek >= 0 ? '+' : '−') + Math.abs(m.aiSavedWeek - m.aiCostWeek).toFixed(0) + 'h', `AI net / week at ${sim.cfg.aiUsage}% usage`) : ''}
       ${tile('user-clock', sim.deploySession ? esc(sim.devs[sim.deploySession.devId].name) : '–', 'on call now')}
     </div>
     <div class="breakdown">
@@ -227,7 +230,7 @@ export function renderKanban(sim: Sim) {
 
 type Field = { key: keyof Config; label: string; min?: number; max?: number; step?: number; restart?: boolean };
 type Matrix = { cols: string[]; rows: { label: string; keys: (keyof Config)[] }[] };
-const GROUPS: { title: string; icon: string; fields: Field[]; matrix?: Matrix }[] = [
+const GROUPS: { title: string; icon: string; fields: Field[]; matrix?: Matrix; note?: string }[] = [
   {
     title: 'Team and demand',
     icon: 'users',
@@ -242,6 +245,19 @@ const GROUPS: { title: string; icon: string; fields: Field[]; matrix?: Matrix }[
       { key: 'pickOnlyAtDaily', label: 'New tasks only pulled at the daily' },
       { key: 'refineHours', label: 'Refinement duration (h)', min: 0.5, max: 8, step: 0.5 },
       { key: 'refineBatch', label: 'Items per refinement', min: 1, max: 10, step: 1 },
+    ],
+  },
+  {
+    title: 'AI-powered',
+    icon: 'robot',
+    note: 'Up to the sweet spot AI mostly helps (faster coding, slightly fewer mistakes). Beyond it, over-reliance makes review comments and bugs grow fast (juniors ×1.5, seniors ×0.6), diffs get bigger and bugs harder to debug.',
+    fields: [
+      { key: 'aiUsage', label: 'AI usage (% of coding, 0 = off)', min: 0, max: 100, step: 5 },
+      { key: 'aiSpeedup', label: 'Pro: % faster coding at 100% usage', min: 0, max: 90, step: 5 },
+      { key: 'aiSweetSpot', label: 'Sweet spot: usage % before quality degrades', min: 1, max: 99, step: 5 },
+      { key: 'aiQualityPenalty', label: 'Con: % more review comments & bugs at 100%', min: 0, max: 300, step: 10 },
+      { key: 'aiReviewOverhead', label: 'Con: % bigger diffs (review effort, conflicts) at 100%', min: 0, max: 200, step: 10 },
+      { key: 'aiDebugPenalty', label: 'Con: % longer bug fixes at 100%', min: 0, max: 200, step: 10 },
     ],
   },
   {
@@ -341,7 +357,7 @@ function matrixHtml(cfg: Config, fields: Field[], m: Matrix) {
 export function buildConfigForm(cfg: Config, onChange: (restart: boolean) => void) {
   const form = $('configForm');
   form.innerHTML = GROUPS.map(
-    (g) => `<fieldset><legend>${ic(g.icon)} ${g.title}</legend>${g.matrix ? matrixHtml(cfg, g.fields, g.matrix) : g.fields
+    (g) => `<fieldset><legend>${ic(g.icon)} ${g.title}</legend>${g.note ? `<p class="hint">${g.note}</p>` : ''}${g.matrix ? matrixHtml(cfg, g.fields, g.matrix) : g.fields
       .map((f) => {
         const v = cfg[f.key];
         if (typeof v === 'boolean')
