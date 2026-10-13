@@ -208,7 +208,7 @@ output.bump { animation: b-bump .35s ease-out; }
 @keyframes b-go { 30% { transform: scale(.94); } 70% { transform: scale(1.04); box-shadow: 0 0 0 14px rgba(245,184,31,0), 0 6px 40px rgba(245,184,31,.7); } }
 
 /* reel: the builder as a big card over the dimmed office */
-.setup { position: fixed; inset: 0; z-index: 20; display: grid; place-items: center; background: rgba(12,14,20,.62); backdrop-filter: blur(6px); transition: opacity .5s, backdrop-filter .5s; }
-.setup .builder { zoom: 2.35; width: 400px; margin: 0; }
+.setup { position: fixed; inset: 0; z-index: 20; display: grid; place-items: start center; padding-top: 300px; background: rgba(12,14,20,.62); backdrop-filter: blur(6px); transition: opacity .5s, backdrop-filter .5s; }
+.setup .builder { zoom: 2.05; width: 440px; margin: 0; }
 .setup.leaving { opacity: 0; backdrop-filter: blur(0); pointer-events: none; }
 .setup.leaving .builder { transform: translateY(40px) scale(.96); transition: transform .5s cubic-bezier(.4, 0, .2, 1); }
