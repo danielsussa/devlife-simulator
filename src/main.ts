@@ -6,6 +6,7 @@ import { OfficeScene } from './scene';
 import { useReelLayout } from './office';
 import { defaultConfig, Sim } from './sim';
 import { loadConfigFromUrl, shareUrl, syncUrl } from './share';
+import { mountBuilder } from './builder';
 import { buildConfigForm, ic, renderClock, renderKanban, renderLog, renderMetrics, renderProgress, renderReport, renderTeam } from './ui';
 
 // ?view=reel: vertical 9:16 office with no UI around it, for recording short videos (&focus=<room> frames one room)
@@ -100,7 +101,58 @@ document.getElementById('configClose')!.addEventListener('click', () => (drawer.
 buildConfigForm(cfg, (needsRestart) => {
   syncUrl(cfg);
   if (needsRestart) restart();
+  builder.render();
 });
+
+// the team builder writes the same config: keep the form's inputs in step with it
+function syncForm() {
+  document.querySelectorAll<HTMLInputElement>('#configForm input[name]').forEach((input) => {
+    const v = cfg[input.name as keyof typeof cfg];
+    if (input.type === 'checkbox') input.checked = !!v;
+    else if (!Array.isArray(v)) input.value = String(v);
+  });
+}
+const builder = mountBuilder(document.getElementById('builder')!, cfg, {
+  onChange: (needsRestart) => {
+    syncUrl(cfg);
+    syncForm();
+    if (needsRestart) restart();
+  },
+  onSimulate: () => {
+    restart();
+    drawer.hidden = true;
+    speed = 3;
+    renderSpeeds();
+  },
+});
+
+// ?view=reel&setup=1: the builder as a full-screen card over the paused office; Simulate starts the run
+if (params.get('view') === 'reel' && params.get('setup')) {
+  const overlay = document.createElement('div');
+  overlay.className = 'setup';
+  const card = document.createElement('div');
+  overlay.append(card);
+  document.body.append(overlay);
+  const runSpeed = speed;
+  speed = 0;
+  renderSpeeds();
+  const reelBuilder = mountBuilder(card, cfg, {
+    onChange: (needsRestart) => {
+      syncUrl(cfg);
+      syncForm();
+      builder.render();
+      if (needsRestart) restart();
+    },
+    onSimulate: () => {
+      restart();
+      speed = runSpeed;
+      renderSpeeds();
+      setTimeout(() => overlay.classList.add('leaving'), 350);
+      setTimeout(() => overlay.remove(), 1000);
+    },
+  });
+  (window as unknown as Record<string, unknown>).reelBuilder = reelBuilder;
+}
 
 const shareBtn = document.getElementById('shareBtn')!;
 shareBtn.addEventListener('click', async () => {
