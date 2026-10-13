@@ -159,3 +159,8 @@ svg.chart g:hover .hit { fill: #ffffff08; }
   #kanban { height: 260px; }
   .drawer { width: 100%; }
 }
+
+/* ?view=reel: only the office, filling a 9:16 screen (for recording) */
+body.reel header, body.reel #side, body.reel #kanban { display: none; }
+body.reel #app { grid-template-rows: minmax(0, 1fr); }
+body.reel main { grid-template-columns: minmax(0, 1fr); }

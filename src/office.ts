@@ -1,8 +1,17 @@
 // Office floor plan in tile coordinates. Positions are floats (0.5 = tile center).
 import { F } from './assets';
 
-export const MAP_W = 34;
-export const MAP_H = 24;
+export let MAP_W = 34;
+export let MAP_H = 24;
+let reel = false;
+
+/** Vertical 9:16 floor plan (20×35 tiles) for short videos: the rooms stacked in flow order, top to bottom.
+ *  Call before building the scene (main.ts does it for ?view=reel). */
+export function useReelLayout() {
+  reel = true;
+  MAP_W = 20;
+  MAP_H = 35;
+}
 
 export interface Pt {
   x: number;
@@ -52,7 +61,8 @@ export interface Layout {
 
 const grid = <T>(v: T) => Array.from({ length: MAP_H }, () => Array.from({ length: MAP_W }, () => v));
 
-export function buildLayout(envCount: number, prodCount: number): Layout {
+// drawing helpers shared by both floor plans
+function kit() {
   const wall = grid(false);
   const blocked = grid(false);
   const floor = grid<FloorKind>('wood');
@@ -77,6 +87,12 @@ export function buildLayout(envCount: number, prodCount: number): Layout {
     x: x0 + (i % perRow) * dx,
     y: y0 + Math.floor(i / perRow) * dy,
   });
+  return { wall, blocked, floor, props, labels, setWall, fill, put, table, slots };
+}
+
+export function buildLayout(envCount: number, prodCount: number): Layout {
+  if (reel) return buildReelLayout(envCount, prodCount);
+  const { wall, blocked, floor, props, labels, setWall, fill, put, table, slots } = kit();
 
   // Outer walls (the top one is 2 tiles tall, top-down style)
   for (let x = 0; x < MAP_W; x++) {
@@ -208,6 +224,135 @@ export function buildLayout(envCount: number, prodCount: number): Layout {
     doneCapacity: 64,
     door: { x: 33.5, y: 12.5 },
     outside: { x: 35, y: 12.5 },
+  };
+}
+
+/** The same office in 9:16: product → refinement → dev team + code review → main → production, top to bottom. */
+function buildReelLayout(envCount: number, prodCount: number): Layout {
+  const { wall, blocked, floor, props, labels, setWall, fill, put, table, slots } = kit();
+
+  // outer walls (top one 2 tiles tall); entrance on the right, at the corridor
+  for (let x = 0; x < MAP_W; x++) {
+    setWall(x, 0);
+    setWall(x, 1);
+    setWall(x, MAP_H - 1);
+  }
+  for (let y = 0; y < MAP_H; y++) {
+    setWall(0, y);
+    if (y !== 25 && y !== 26) setWall(MAP_W - 1, y);
+  }
+  // partitions between the bands, each with a 2-tile doorway in the middle
+  for (const y of [8, 14, 27]) for (let x = 0; x < MAP_W; x++) if (x !== 9 && x !== 10) setWall(x, y);
+
+  fill(1, 9, 18, 13, 'wood2');
+  fill(1, 15, 12, 24, 'carpet');
+  fill(13, 15, 18, 24, 'carpet2');
+  fill(1, 28, 18, 33, 'tile');
+
+  // --- Product / backlog (top band) ---
+  const board = [
+    { x: 1.3, y: 0.15, w: 8.4, h: 1.7, title: 'BACKLOG' },
+    { x: 10.3, y: 0.15, w: 8.4, h: 1.7, title: 'READY FOR DEV' },
+  ];
+  table(14, 15, 5);
+  put(F.officeChair, 14, 4, false);
+  put(F.stove, 1, 6); // coffee corner
+  put(F.plant, 18, 7);
+  labels.push({ text: 'PRODUCT', x: 9.5, y: 7.6 });
+
+  // --- Refinement ---
+  fill(3, 9, 16, 13, 'green');
+  table(7, 12, 11);
+  const meetingSeats: Pt[] = [];
+  for (const x of [7, 9, 11]) {
+    put(F.chairFront, x, 10, false);
+    meetingSeats.push({ x: x + 0.5, y: 10.5 });
+  }
+  for (const x of [8, 10, 12]) {
+    put(F.chairBack, x, 12, false);
+    meetingSeats.push({ x: x + 0.5, y: 12.5 });
+  }
+  put(F.plant, 1, 9);
+  put(F.plant, 18, 13);
+  labels.push({ text: 'REFINEMENT', x: 9.5, y: 13.6 });
+
+  // --- Dev team (left) + code review (right) ---
+  const desks: Layout['desks'] = [];
+  for (let row = 0; row < 3; row++)
+    for (let col = 0; col < 3; col++) {
+      const dx = 2 + col * 4;
+      const dy = 17 + row * 3;
+      table(dx, dx + 1, dy);
+      put(F.officeChair, dx, dy - 1, false);
+      desks.push({ seat: { x: dx + 0.5, y: dy - 0.45 }, card: { x: dx + 1.5, y: dy + 0.3 }, monitor: { x: dx + 0.5, y: dy - 0.05 } });
+    }
+  for (const x of [1, 12]) put(F.plantSmall, x, 15);
+  labels.push({ text: 'DEV TEAM', x: 6.5, y: 24.6 });
+  table(14, 17, 18);
+  table(14, 17, 21);
+  labels.push({ text: 'CODE REVIEW', x: 16, y: 24.6 });
+
+  // --- main branch, in the corridor ---
+  table(12, 17, 25);
+  labels.push({ text: 'MAIN', x: 14.5, y: 26.3 });
+
+  // --- Infra: racks on the left, delivered on the right ---
+  const racks: Layout['racks'] = [];
+  const span = 12 / Math.max(1, envCount);
+  const firstProd = Math.max(0, envCount - Math.max(1, prodCount));
+  const rackX = (i: number) => Math.round(1 + i * span + span / 2 - 1);
+  const prodStart = firstProd === 0 ? 1 : Math.max(1, rackX(firstProd) - 1);
+  fill(prodStart, 28, 13, 33, 'prod');
+  for (let i = 0; i < envCount; i++) {
+    const rx = rackX(i);
+    put(F.server, rx, 30);
+    put(F.serverAlt, rx + 1, 30);
+    racks.push({
+      label: { x: rx + 1, y: 28.05 },
+      bar: { x: rx + 1, y: 29.35 },
+      canaryCard: slots(rx + 0.35, 30.35, 3, 0.65, 0.5),
+      queueCard: slots(rx + 0.1, 32.2, 4, 0.5, 0.6),
+    });
+  }
+  fill(14, 29, 18, 33, 'green');
+  table(12, 13, 33); // deploy console
+  put(F.officeChair, 12, 32, false);
+  if (prodStart > 2) labels.push({ text: 'PRE-PROD', x: (1 + prodStart) / 2, y: 33.6 });
+  labels.push({ text: 'PRODUCTION', x: (prodStart + 12) / 2, y: 33.6 });
+  labels.push({ text: 'DELIVERED', x: 16.5, y: 28.6 });
+
+  return {
+    wall,
+    blocked,
+    floor,
+    props,
+    labels,
+    board,
+    desks,
+    poSeat: { x: 14.5, y: 4.55 },
+    poMeetingSeat: { x: 6.5, y: 11.5 },
+    deployConsole: { seat: { x: 12.5, y: 32.55 }, monitor: { x: 12.5, y: 32.95 } },
+    meetingSeats,
+    meetingCard: slots(7.35, 11.4, 8, 0.7, 0.3),
+    idleSpots: [
+      { x: 2.5, y: 6.4 }, { x: 3.4, y: 5.6 }, { x: 4.3, y: 6.5 }, { x: 2.2, y: 7.4 }, { x: 3.3, y: 7.5 },
+      { x: 5.2, y: 5.7 }, { x: 4.4, y: 7.4 }, { x: 6.2, y: 6.6 }, { x: 5.4, y: 7.5 },
+    ],
+    standupSpots: Array.from({ length: 9 }, (_, i) => ({ x: 1.9 + i * 0.95, y: i % 2 ? 4.0 : 3.2 })),
+    poStandup: { x: 11.5, y: 3.6 },
+    readyCard: slots(10.7, 0.85, 16, 0.5, 0.45),
+    readyCapacity: 48,
+    backlogCard: slots(1.7, 0.85, 16, 0.5, 0.45),
+    backlogCapacity: 48,
+    reviewCard: slots(14.4, 18.35, 6, 0.65, 3),
+    reviewCapacity: 12,
+    racks,
+    mainCard: slots(12.3, 25.35, 11, 0.5, 0.35),
+    mainCapacity: 22,
+    doneCard: slots(14.5, 29.6, 8, 0.5, 0.55),
+    doneCapacity: 64,
+    door: { x: 19.5, y: 25.5 },
+    outside: { x: 21, y: 25.5 },
   };
 }
 

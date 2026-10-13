@@ -3,9 +3,17 @@ import '@fortawesome/fontawesome-free/css/fontawesome.min.css';
 import '@fortawesome/fontawesome-free/css/solid.min.css';
 import './style.css';
 import { OfficeScene } from './scene';
+import { useReelLayout } from './office';
 import { defaultConfig, Sim } from './sim';
 import { loadConfigFromUrl, shareUrl, syncUrl } from './share';
 import { buildConfigForm, ic, renderClock, renderKanban, renderLog, renderMetrics, renderProgress, renderReport, renderTeam } from './ui';
+
+// ?view=reel: vertical 9:16 office with no UI around it, for recording short videos (&focus=<room> frames one room)
+const params = new URLSearchParams(location.search);
+if (params.get('view') === 'reel') {
+  useReelLayout();
+  document.body.classList.add('reel');
+}
 
 const cfg = structuredClone(defaultConfig);
 loadConfigFromUrl(cfg); // setup shared via ?cfg=
