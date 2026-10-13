@@ -40,6 +40,14 @@ export interface SceneHooks {
   highlightId: () => number | null;
 }
 
+// rooms of the vertical floor plan (office.ts, buildReelLayout), in tiles: x, y, w, h
+const REEL_FOCUS: Record<string, [number, number, number, number]> = {
+  product: [0, 0, 13, 15],
+  dev: [0, 14, 13, 13],
+  review: [10, 14, 10, 13],
+  prod: [0, 24, 13, 11],
+};
+
 export class OfficeScene extends Phaser.Scene {
   private layout!: Layout;
   private devs: Walker[] = [];
@@ -434,7 +442,7 @@ export class OfficeScene extends Phaser.Scene {
         this.rackTexts[i].setText(`${env.name.toUpperCase()}\n `);
       }
       // rack LEDs
-      const lx = r.label.x * TILE - 10, ly = 18 * TILE + 3;
+      const lx = r.label.x * TILE - 10, ly = (r.bar.y + 0.65) * TILE + 3;
       const busy = env.batch.length > 0;
       for (let k = 0; k < 4; k++) {
         const on = busy ? Math.floor(this.time.now / 150 + k) % 2 === 0 : k === 0;
@@ -458,7 +466,7 @@ export class OfficeScene extends Phaser.Scene {
       const a = 0.35 + 0.35 * Math.sin(this.time.now / 180);
       g.lineStyle(3, 0xff3b3b, a).strokeRect(1.5, 1.5, MAP_W * TILE - 3, MAP_H * TILE - 3);
       const prod = L.racks[L.racks.length - 1];
-      g.fillStyle(0xff3b3b, a * 0.5).fillCircle(prod.label.x * TILE, 18.5 * TILE, 14);
+      g.fillStyle(0xff3b3b, a * 0.5).fillCircle(prod.label.x * TILE, (prod.bar.y + 1.15) * TILE, 14);
     }
 
     // line from the reviewer to the PR being read
@@ -590,9 +598,14 @@ export class OfficeScene extends Phaser.Scene {
   private fitCamera() {
     const cam = this.cameras.main;
     const w = this.scale.width, h = this.scale.height;
-    const zoom = Math.min(w / (MAP_W * TILE), h / (MAP_H * TILE));
-    cam.setZoom(zoom);
-    cam.centerOn((MAP_W * TILE) / 2, (MAP_H * TILE) / 2);
+    // reel view: &focus=<room> fills the screen with one room (rect in tiles); otherwise the whole office fits
+    const focus = REEL_FOCUS[new URLSearchParams(location.search).get('focus') ?? ''];
+    const [fx, fy, fw, fh] = MAP_W === 20 && focus ? focus : [0, 0, MAP_W, MAP_H];
+    cam.setZoom(Math.min(w / (fw * TILE), h / (fh * TILE)));
+    // with a focus, the rest of the office fills the screen around the room, without showing past its walls
+    if (focus && MAP_W === 20) cam.setBounds(0, 0, MAP_W * TILE, MAP_H * TILE);
+    else cam.removeBounds();
+    cam.centerOn((fx + fw / 2) * TILE, (fy + fh / 2) * TILE);
     cam.setBackgroundColor('#1c1f26');
   }
 }
